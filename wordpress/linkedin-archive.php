@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkedIn Archive Feed
  * Description: Zeigt freigegebene Beiträge aus dem eigenen LinkedIn-Archiv über [linkedin_archive] an.
- * Version: 2.4.0
+ * Version: 2.5.0
  */
 
 if (!defined('ABSPATH')) {

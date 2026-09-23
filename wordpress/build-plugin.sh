@@ -64,8 +64,17 @@ if command -v php >/dev/null 2>&1; then
         exit 1
     }
     echo "PHP-Syntax geprüft."
+    if [ -f "$here/tests.php" ]; then
+        php "$here/tests.php" >/dev/null || {
+            echo "Fehler: tests.php schlägt fehl; kein Paket erstellt." >&2
+            echo "Einzelheiten: php wordpress/tests.php" >&2
+            exit 1
+        }
+        echo "Plugin-Tests bestanden."
+    fi
 else
-    echo "Hinweis: PHP nicht gefunden, Syntaxprüfung übersprungen."
+    echo "Hinweis: PHP nicht gefunden, Syntax- und Testprüfung übersprungen."
+    echo "         Mit Docker: docker run --rm -v \"\$PWD/wordpress:/w:ro\" php:8.3-cli php /w/tests.php"
 fi
 
 archive="$output_dir/$SLUG-$version.zip"
@@ -74,6 +83,7 @@ stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 
 mkdir -p "$stage/$SLUG"
+# Nur die Plugin-Datei wandert ins Paket, nicht die Tests.
 cp "$source_file" "$stage/$SLUG/$MAIN_FILE"
 
 rm -f "$archive"
