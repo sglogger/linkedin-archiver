@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkedIn Archive Feed
  * Description: Zeigt freigegebene Beiträge aus dem eigenen LinkedIn-Archiv über [linkedin_archive] an.
- * Version: 2.1.0
+ * Version: 2.2.0
  */
 
 if (!defined('ABSPATH')) {
@@ -198,10 +198,17 @@ add_shortcode('linkedin_archive', function ($attributes) {
     ob_start();
     ?>
     <style>
-    /* align-items:start, damit eine kurze Karte nicht auf die Höhe der längsten
-       in derselben Zeile aufgezogen wird. */
-    .li-archive-grid{display:grid;grid-template-columns:repeat(var(--li-columns,2),minmax(0,1fr));gap:24px;margin:20px 0;align-items:start}
-    @media (max-width:860px){.li-archive-grid{grid-template-columns:1fr}}
+    /* Echte Spalten statt Raster: Jede Karte schliesst direkt an die darüber in
+       derselben Spalte an, unabhängig von der Nachbarspalte. Die Beiträge werden
+       serverseitig abwechselnd verteilt (links, rechts, links, ...). */
+    .li-archive-grid{display:flex;gap:24px;margin:20px 0;align-items:flex-start}
+    .li-archive-col{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:24px}
+    /* Einspaltig: Die Spalten lösen sich auf, und `order` stellt die
+       ursprüngliche chronologische Reihenfolge wieder her. */
+    @media (max-width:860px){
+      .li-archive-grid{flex-direction:column}
+      .li-archive-col{display:contents}
+    }
     .li-archive-card{background:#fff;border:1px solid #e7eaf0;border-radius:12px;box-shadow:0 5px 25px rgba(0,0,0,.055);overflow:hidden;display:flex;flex-direction:column}
     .li-archive-card__header{display:flex;align-items:center;gap:12px;padding:18px 20px 14px}
     .li-archive-card__avatar{width:48px;height:48px;border-radius:50%;object-fit:cover;flex:0 0 auto;background:#e7eaf0}
@@ -228,9 +235,18 @@ add_shortcode('linkedin_archive', function ($attributes) {
     .li-archive-logo{display:block}
     .li-archive-pages{display:flex;gap:16px;justify-content:center;margin:30px 0}
     </style>
-    <div class="li-archive-grid" style="--li-columns:<?php echo esc_attr($columns); ?>">
-    <?php foreach ($data['posts'] as $post) :
-        if (!is_array($post)) { continue; }
+    <?php
+    $entries = array_values(array_filter($data['posts'], 'is_array'));
+    $buckets = array_fill(0, $columns, array());
+    foreach ($entries as $index => $entry) {
+        $buckets[$index % $columns][] = array($index, $entry);
+    }
+    ?>
+    <div class="li-archive-grid">
+    <?php foreach ($buckets as $bucket) : ?>
+    <div class="li-archive-col">
+    <?php foreach ($bucket as $slot) :
+        list($order, $post) = $slot;
 
         $permalink = '';
         foreach (array('canonical_url', 'source_url') as $candidate) {
@@ -244,7 +260,7 @@ add_shortcode('linkedin_archive', function ($attributes) {
             $body = linkedin_archive_linkify_hashtags(esc_html($post['content_text'] ?? ''));
         }
         ?>
-        <article class="li-archive-card">
+        <article class="li-archive-card" style="order:<?php echo esc_attr($order); ?>">
             <header class="li-archive-card__header">
                 <?php if ($avatar) : ?>
                     <img class="li-archive-card__avatar" loading="lazy" src="<?php echo esc_url($avatar); ?>"
@@ -306,10 +322,12 @@ add_shortcode('linkedin_archive', function ($attributes) {
         </article>
     <?php endforeach; ?>
     </div>
-    <?php if (empty($data['posts'])) : ?><p>Noch keine freigegebenen LinkedIn-Beiträge.</p><?php endif; ?>
+    <?php endforeach; ?>
+    </div>
+    <?php if (empty($entries)) : ?><p>Noch keine freigegebenen LinkedIn-Beiträge.</p><?php endif; ?>
     <nav class="li-archive-pages" aria-label="LinkedIn-Beiträge">
         <?php if ($page > 1) : ?><a href="<?php echo esc_url(add_query_arg('li_page', $page - 1)); ?>">← Neuere Beiträge</a><?php endif; ?>
-        <?php if ($offset + count($data['posts']) < (int) ($data['total'] ?? 0)) : ?><a href="<?php echo esc_url(add_query_arg('li_page', $page + 1)); ?>">Ältere Beiträge →</a><?php endif; ?>
+        <?php if ($offset + count($entries) < (int) ($data['total'] ?? 0)) : ?><a href="<?php echo esc_url(add_query_arg('li_page', $page + 1)); ?>">Ältere Beiträge →</a><?php endif; ?>
     </nav>
     <?php
     return ob_get_clean();

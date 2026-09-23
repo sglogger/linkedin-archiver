@@ -146,8 +146,11 @@ einen Chat kopierter Token sollte widerrufen und ersetzt werden.
 | `API_PUBLIC_BASE_URL` | http://localhost:8080 | Öffentliche Basis-URL, aus der Bild-URLs gebildet werden |
 | `API_ALLOWED_ORIGIN` | https://www.glogger.ch | Erlaubter Browser-Origin für CORS |
 
-Um beispielsweise externe Vorschau-Bilder von Credly herunterzuladen, kann
-`images.credly.com` zur Hostliste hinzugefügt werden. OAuth-Header werden
+Um beispielsweise externe Vorschau-Bilder von Credly oder ein verlinktes PDF
+herunterzuladen, kann der jeweilige Host zur Liste hinzugefügt werden, etwa
+`images.credly.com`. Die Liste steuert beides: Medien von nicht aufgeführten
+Hosts werden gar nicht erst als Anhang erfasst, statt bei jedem Durchlauf
+erneut am Download zu scheitern. Als Link im Beitragstext bleiben sie erhalten. OAuth-Header werden
 ausschliesslich an `api.linkedin.com` gesendet, nie an Medienhosts.
 
 ## Wie bleiben Personen- und Firmenlinks erhalten?
@@ -376,7 +379,7 @@ WordPress-HTML oder JavaScript. Fehlt `API_READ_KEY` oder ist er noch ein
 Die derzeitige Seite [glogger.ch/linkedin/](https://www.glogger.ch/linkedin/)
 ist eine WordPress-Seite mit einem Juicer-Embed. Das mitgelieferte Plugin
 [`wordpress/linkedin-archive.php`](wordpress/linkedin-archive.php) ersetzt es
-durch eigene Beitragskarten in einem mehrspaltigen Raster:
+durch eigene Beitragskarten in einem mehrspaltigen Masonry-Layout:
 
 - Kopfzeile mit Profilbild, Name und relativer Zeitangabe („vor 3 Tagen“).
 - Darunter die Bilder, dann der Beitragstext.
@@ -386,6 +389,9 @@ durch eigene Beitragskarten in einem mehrspaltigen Raster:
   `#hashtags` werden auf die LinkedIn-Hashtagsuche verlinkt, auch wenn sie im
   Archiv nur als Text vorliegen.
 - Der Beitragstext wird immer vollständig angezeigt, nie gekürzt.
+- Die Beiträge werden abwechselnd auf die Spalten verteilt (links, rechts,
+  links, …). Jede Karte schliesst direkt an die darüberliegende derselben
+  Spalte an; es gibt keine Ausrichtung auf gemeinsame Zeilenhöhen.
 
 Es holt die freigegebenen JSON-Daten serverseitig und speichert die Antwort fünf
 Minuten im WordPress-Cache. Auf schmalen Bildschirmen wird das Raster einspaltig.
@@ -427,7 +433,7 @@ Alle Shortcode-Attribute:
 | Attribut | Standard | Bedeutung |
 |---|---:|---|
 | `limit` | 12 | Beiträge pro Seite, 1–100 |
-| `columns` | 2 | Spalten im Raster, 1–4; unter 860 px immer einspaltig |
+| `columns` | 2 | Spalten, 1–4; unter 860 px einspaltig in chronologischer Reihenfolge |
 | `author` | Konstante | Überschreibt `LINKEDIN_ARCHIVE_AUTHOR_NAME` |
 | `avatar` | Konstante | Überschreibt `LINKEDIN_ARCHIVE_AUTHOR_IMAGE` |
 | `profile` | Konstante | Überschreibt `LINKEDIN_ARCHIVE_AUTHOR_URL` |

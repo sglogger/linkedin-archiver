@@ -8,7 +8,19 @@ from urllib.parse import unquote, urlsplit
 from bs4 import BeautifulSoup
 
 from .content import clean_url, render_fragment
-from .network import FetchError, PublicHttp, validate_url
+from .network import FetchError, PublicHttp, allowed_host, validate_url
+
+
+# LinkedIns Build-CDN für die eigene Oberfläche: Sprites und Icons wie das
+# «Content Credentials»-Badge, das im Bildcontainer neben dem Beitragsbild sitzt.
+# Beitragsmedien liegen dagegen auf media.licdn.com. Ohne diese Abgrenzung landet
+# das Badge als zweites «Bild» in der Datenbank, scheitert als SVG am Download
+# und hält den Beitrag dauerhaft auf `partial`.
+ASSET_HOSTS = frozenset({'static.licdn.com'})
+
+# Vorgabe, passend zu MEDIA_ALLOWED_HOSTS. PageReader reicht die tatsächliche
+# Einstellung durch.
+DEFAULT_MEDIA_HOSTS = ('licdn.com', 'linkedin.com')
 
 
 class PageUnavailable(FetchError):
@@ -51,7 +63,8 @@ def media_key(url: str) -> str:
     return hashlib.sha256(stable.encode()).hexdigest()
 
 
-def parse_page(html: str, source_url: str, expected_key: str) -> PostPage:
+def parse_page(html: str, source_url: str, expected_key: str,
+               media_hosts: tuple[str, ...] = DEFAULT_MEDIA_HOSTS) -> PostPage:
     soup = BeautifulSoup(html, 'html.parser')
     cards = soup.select('article.main-feed-activity-card')
     card = next((x for x in cards if expected_key in {
@@ -70,6 +83,16 @@ def parse_page(html: str, source_url: str, expected_key: str) -> PostPage:
             return
         p = urlsplit(url)
         if p.scheme != 'https' or not p.hostname:
+            return
+        host = p.hostname.lower()
+        if host in ASSET_HOSTS:
+            return
+        # Was MEDIA_ALLOWED_HOSTS ohnehin nicht herunterladen würde, wird gar
+        # nicht erst als Medium angelegt: Der Eintrag würde bei jedem Versuch
+        # erneut scheitern und den Beitrag dauerhaft auf `partial` halten. Ein
+        # externes PDF bleibt als Link in post_links erhalten. Wer es archivieren
+        # will, trägt seinen Host in MEDIA_ALLOWED_HOSTS ein — dann greift beides.
+        if not allowed_host(host, media_hosts):
             return
         key = media_key(url)
         if (key, role) in seen:
@@ -172,7 +195,7 @@ class PageReader:
     def read(self, url: str, key: str) -> PostPage:
         validate_url(url, ('linkedin.com',))
         try:
-            return parse_page(self.http.html(url), url, key)
+            return parse_page(self.http.html(url), url, key, self.settings.media_hosts)
         except FetchError:
             if not self.settings.browser_enabled:
                 raise
@@ -203,7 +226,7 @@ class PageReader:
                 page.goto(url, wait_until='domcontentloaded')
                 selector = f'article.main-feed-activity-card[data-attributed-urn="{key}"]'
                 page.locator(selector).wait_for(state='attached')
-                result = parse_page(page.content(), url, key)
+                result = parse_page(page.content(), url, key, self.settings.media_hosts)
                 result.publicly_accessible = not bool(self.settings.browser_state)
                 return result
             finally:

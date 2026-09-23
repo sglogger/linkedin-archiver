@@ -2,6 +2,8 @@ from pathlib import Path
 from datetime import datetime
 import pytest
 
+from urllib.parse import urlsplit
+
 from linkedin_archiver.content import clean_url, own_post_event, render_fragment, snapshot_post
 from linkedin_archiver.page import parse_page, PageUnavailable, media_key, public_count
 from bs4 import BeautifulSoup
@@ -103,3 +105,47 @@ def test_delete_and_ugc_format():
     data = {'author': 'urn:li:person:ME', 'specificContent': {
         'com.linkedin.ugc.ShareContent': {'shareCommentary': {'text': 'ugc text'}}}}
     assert own_post_event(event(resourceName='ugcPosts', resourceId='123', processedActivity=data))['post_key'] == 'urn:li:ugcPost:123'
+
+
+def test_linkedin_ui_icons_are_not_collected_as_post_media():
+    # static.licdn.com liefert das «Content Credentials»-Badge, das im
+    # Bildcontainer neben dem echten Beitragsbild sitzt.
+    html = f'''<article class="main-feed-activity-card" data-attributed-urn="{KEY}">
+      <div data-test-id="main-feed-activity-card__commentary">Text</div>
+      <div data-test-id="feed-images-content">
+        <img src="https://media.licdn.com/dms/image/v2/ABC/feedshare-shrink_800/0/x.jpg" alt="Foto">
+        <img src="https://static.licdn.com/aero-v1/sc/h/dur0ryw0e9uscxa9b6zqvgvfs" alt="">
+      </div>
+    </article>'''
+    page = parse_page(html, URL, KEY)
+    hosts = [urlsplit(m['source_url']).hostname for m in page.media]
+    assert hosts == ['media.licdn.com'], hosts
+    assert page.media[0]['position'] == 0
+
+
+def page_with(extra):
+    return f'''<article class="main-feed-activity-card" data-attributed-urn="{KEY}">
+      <div data-test-id="main-feed-activity-card__commentary">Text {extra}</div>
+      <div data-test-id="feed-images-content">
+        <img src="https://media.licdn.com/dms/image/v2/ABC/feedshare-shrink_800/0/x.jpg" alt="Foto">
+      </div>
+      {extra}
+    </article>'''
+
+
+def test_external_document_stays_a_link_and_is_not_queued_for_download():
+    # Ein PDF auf einem fremden Host würde MEDIA_ALLOWED_HOSTS ohnehin ablehnen.
+    # Es darf deshalb gar nicht erst als Medium entstehen, sonst scheitert es bei
+    # jedem Durchlauf erneut und hält den Beitrag auf `partial`.
+    anchor = '<a href="https://www.sbs.ox.ac.uk/sites/default/files/report.pdf">Report</a>'
+    page = parse_page(page_with(anchor), URL, KEY)
+    assert [m['kind'] for m in page.media] == ['image']
+    assert any(l['url'].startswith('https://www.sbs.ox.ac.uk/') for l in page.links)
+
+
+def test_document_host_added_to_media_allowed_hosts_is_archived():
+    anchor = '<a href="https://www.sbs.ox.ac.uk/sites/default/files/report.pdf">Report</a>'
+    page = parse_page(page_with(anchor), URL, KEY,
+                      ('licdn.com', 'linkedin.com', 'sbs.ox.ac.uk'))
+    assert [m['kind'] for m in page.media] == ['image', 'document']
+    assert page.media[1]['source_url'].endswith('report.pdf')
