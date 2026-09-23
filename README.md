@@ -230,6 +230,13 @@ Medien verarbeitet wurden; es beweist nicht, dass LinkedIn alle Anhänge auslief
 Native lange LinkedIn-Artikel/Newsletter (`/pulse/`) werden in dieser Version
 nicht als vollständige Artikel importiert; Schwerpunkt sind Feed-Beiträge.
 
+Beiträge ohne eigenen Text — etwa ein geteilter Artikel oder ein Zertifikat —
+haben auf der Seite kein Kommentarfeld. Sie werden trotzdem archiviert: Titel
+und Ziel des Artikels landen in `post_links`, das Vorschaubild in `post_media`
+mit der Rolle `preview`, und `content_text` bleibt leer statt erfunden zu werden.
+LinkedIns Klick-Umleitung `/redir/redirect?url=…` wird dabei auf die tatsächliche
+Zieladresse zurückgeführt.
+
 LinkedIn kann öffentliche Seiten einschränken oder deren HTML ändern. Dann
 bleiben die API-Texte erhalten, und der Fehler ist über `status` sichtbar.
 Ein fehlender Snapshot oder eine Login-Seite wird nicht als Löschung behandelt.

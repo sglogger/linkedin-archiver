@@ -7,7 +7,7 @@ from urllib.parse import unquote, urlsplit
 
 from bs4 import BeautifulSoup
 
-from .content import clean_url, render_fragment
+from .content import clean_url, link_kind, render_fragment
 from .network import FetchError, PublicHttp, allowed_host, validate_url
 
 
@@ -82,8 +82,14 @@ def parse_page(html: str, source_url: str, expected_key: str,
         raise PageUnavailable('Matching post card unavailable (login, restriction or changed markup)')
     commentary = card.select_one('[data-test-id="main-feed-activity-card__commentary"]')
     if commentary is None:
-        raise PageUnavailable('Post commentary markup not found')
-    safe_html, text, links = render_fragment(str(commentary), source_url)
+        # Ein reiner Link- oder Bildbeitrag ohne eigenen Text. Die Karte passt
+        # zur erwarteten URN, der Beitrag existiert also — er hat schlicht kein
+        # Kommentarfeld. Als Fehler gewertet würde er in jedem Zyklus erneut
+        # versucht, ohne je gelingen zu können.
+        safe_html, text, links, fragment = '', '', [], ''
+    else:
+        safe_html, text, links = render_fragment(str(commentary), source_url)
+        fragment = str(commentary)
 
     # Ein Repost verschachtelt den geteilten Beitrag als eigenes <article>.
     # Dessen Bild/Video IST der Inhalt des Reposts und gehört dazu; andere
@@ -182,6 +188,21 @@ def parse_page(html: str, source_url: str, expected_key: str,
         if original is not None:
             reshare_html, reshare_text, _ = render_fragment(str(original), source_url)
 
+    # Ein geteilter Artikel ist bei Beiträgen ohne Kommentar der ganze Inhalt:
+    # Titel, Ziel und Vorschaubild gehören ins Archiv, sonst bleibt eine leere
+    # Hülle. Das Vorschaubild liegt ausserhalb von feed-images-content.
+    article = card.select_one('[data-test-id="article-content"]')
+    if article is not None:
+        target = clean_url(article.get('href', ''), source_url)
+        if target and not any(link['url'] == target for link in links):
+            heading = card.select_one('[data-test-id="article-content__title"]')
+            label = (heading.get_text(' ', strip=True) if heading else '') or target
+            links.append({'position': len(links), 'text': label,
+                          'url': target, 'kind': link_kind(target)})
+        for preview in article.select('img'):
+            add(preview.get('data-delayed-url') or preview.get('src'),
+                'image', 'preview', preview.get('alt', ''))
+
     canonical = soup.select_one('link[rel="canonical"]')
     canonical_url = clean_url(canonical.get('href', ''), source_url) if canonical else source_url
     reaction_count = public_count(card.select_one('[data-test-id="social-actions__reaction-count"]'))
@@ -215,7 +236,7 @@ def parse_page(html: str, source_url: str, expected_key: str,
                     and isinstance(action, str) and action.endswith('/LikeAction')):
                 reaction_count = count
         break
-    return PostPage(text, safe_html, links, media, str(commentary),
+    return PostPage(text, safe_html, links, media, fragment,
                     card.get('data-activity-urn'),
                     canonical_url, reaction_count=reaction_count,
                     comment_count=comment_count, published_at=published_at,

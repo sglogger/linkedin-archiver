@@ -33,6 +33,11 @@ def clean_url(value: str, base: str = "https://www.linkedin.com", depth: int = 0
     if any(ord(c) < 32 for c in value):
         return None
     if p.hostname == "linkedin.com" or p.hostname.endswith(".linkedin.com"):
+        if p.path == "/redir/redirect":
+            # LinkedIns Klickzähler. Das eigentliche Ziel steht im url-Parameter
+            # und ist bewusst extern — anders als bei den Anmeldelinks unten.
+            target = parse_qs(p.query).get("url", [None])[0]
+            return clean_url(target, base, depth + 1) if target else None
         if p.path in {"/signup/cold-join", "/login", "/authwall"}:
             redirect = parse_qs(p.query).get("session_redirect", [None])[0]
             # Do not preserve a login link in place of a mention.

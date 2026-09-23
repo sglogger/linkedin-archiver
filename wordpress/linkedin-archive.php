@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkedIn Archive Feed
  * Description: Zeigt freigegebene Beiträge aus dem eigenen LinkedIn-Archiv über [linkedin_archive] an.
- * Version: 2.5.0
+ * Version: 2.6.0
  */
 
 if (!defined('ABSPATH')) {
@@ -299,6 +299,10 @@ add_shortcode('linkedin_archive', function ($attributes) {
     .li-archive-reshare__text p:last-child{margin-bottom:0}
     .li-archive-reshare__text a{color:#0a66c2;text-decoration:none}
     .li-archive-reshare__text a:hover{text-decoration:underline}
+    .li-archive-card__article{display:block;text-decoration:none;border:1px solid #e7eaf0;border-radius:8px;padding:12px 14px;background:#f8f9fb}
+    .li-archive-card__article:hover{background:#f1f3f7}
+    .li-archive-card__article-title{display:block;font-weight:600;color:#1b1f24;line-height:1.4}
+    .li-archive-card__article-host{display:block;margin-top:4px;font-size:.8rem;color:#8a94a0}
     .li-archive-card__footer{margin-top:auto;display:flex;align-items:center;gap:16px;padding:10px 16px;border-top:1px solid #edf0f4;font-size:.88rem;color:#66707d}
     .li-archive-card__stat{display:inline-flex;align-items:center;gap:6px;color:#8a94a0}
     .li-archive-stat-icon{display:block;flex:0 0 auto}
@@ -376,7 +380,26 @@ add_shortcode('linkedin_archive', function ($attributes) {
             <?php endif; ?>
 
             <div class="li-archive-card__body">
-                <div class="li-archive-card__text"><?php echo $body; ?></div>
+                <?php if ('' !== trim(wp_strip_all_tags($body))) : ?>
+                    <div class="li-archive-card__text"><?php echo $body; ?></div>
+                <?php endif; ?>
+                <?php
+                // Beiträge ohne eigenen Text — ein geteilter Artikel, ein
+                // Zertifikat — hätten sonst eine leere Karte. Dann ist der Link
+                // der Inhalt und wird als Titelzeile gezeigt.
+                if ('' === trim(wp_strip_all_tags($body)) && !empty($post['links'])) :
+                    foreach ($post['links'] as $link) :
+                        if (empty($link['url'])) { continue; } ?>
+                        <a class="li-archive-card__article" href="<?php echo esc_url($link['url']); ?>"
+                           target="_blank" rel="noopener noreferrer">
+                            <span class="li-archive-card__article-title"><?php
+                                echo esc_html($link['label'] ?: $link['url']); ?></span>
+                            <span class="li-archive-card__article-host"><?php
+                                echo esc_html(preg_replace('#^www\.#', '',
+                                    (string) wp_parse_url($link['url'], PHP_URL_HOST))); ?></span>
+                        </a>
+                    <?php endforeach;
+                endif; ?>
                 <?php if (!empty($post['reshare_author'])) : ?>
                     <div class="li-archive-reshare">
                         <div class="li-archive-reshare__head">

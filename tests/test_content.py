@@ -192,3 +192,39 @@ def test_video_identity_survives_a_bitrate_change():
 def test_a_plain_post_reports_no_reshare():
     page = parse_page(FIXTURE.read_text(), URL, KEY)
     assert page.reshare_author is None and page.reshare_html is None
+
+
+ARTICLE = Path(__file__).parent / 'fixtures/article-share.html'
+ARTICLE_KEY = 'urn:li:share:6382931760497389568'
+ARTICLE_URL = 'https://www.linkedin.com/feed/update/urn%3Ali%3Ashare%3A6382931760497389568'
+
+
+def test_link_share_without_own_text_is_not_a_failure():
+    # Ein geteilter Artikel ohne Kommentar hat kein commentary-Element. Früher
+    # galt das als Fehler und der Beitrag wurde in jedem Zyklus neu versucht,
+    # ohne je gelingen zu können.
+    page = parse_page(ARTICLE.read_text(), ARTICLE_URL, ARTICLE_KEY)
+    assert page.text == '' and page.html == ''
+
+
+def test_link_share_keeps_target_title_and_preview():
+    page = parse_page(ARTICLE.read_text(), ARTICLE_URL, ARTICLE_KEY)
+    assert [l['url'] for l in page.links] == [
+        'https://www.youracclaim.com/badges/e400771c-6afd-464b-a664-2eacc88dfc8b']
+    assert page.links[0]['text'].startswith('Stress-Tolerant')
+    assert page.links[0]['kind'] == 'external'
+    # Das Vorschaubild liegt ausserhalb von feed-images-content.
+    assert [(m['kind'], m['role']) for m in page.media] == [('image', 'preview')]
+
+
+def test_linkedin_click_redirect_is_unwrapped_to_the_real_target():
+    wrapped = ('https://www.linkedin.com/redir/redirect?url=https%3A%2F%2Fexample%2Ecom%2Fa'
+               '&urlhash=phjs&trk=pub')
+    assert clean_url(wrapped) == 'https://example.com/a'
+    # Ohne Ziel bleibt nichts übrig, statt den Zähler-Link zu archivieren.
+    assert clean_url('https://www.linkedin.com/redir/redirect?urlhash=x') is None
+
+
+def test_a_post_with_text_is_unaffected():
+    page = parse_page(FIXTURE.read_text(), URL, KEY)
+    assert page.text and page.html and page.fragment
