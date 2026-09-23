@@ -28,3 +28,6 @@ dist/
 .DS_Store
 .idea/
 .vscode/
+mariadb-data
+archive-data
+secrets
