@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkedIn Archive Feed
  * Description: Zeigt freigegebene Beiträge aus dem eigenen LinkedIn-Archiv über [linkedin_archive] an.
- * Version: 2.2.0
+ * Version: 2.4.0
  */
 
 if (!defined('ABSPATH')) {
@@ -86,6 +86,31 @@ function linkedin_archive_relative_time($timestamp) {
 }
 
 /**
+ * Kompakte Zeitangabe oben rechts, wie LinkedIn sie selbst verwendet:
+ * 5m, 3h, 25d, 2w, 3mo, 1y. Das ausgeschriebene Datum steht im title-Attribut.
+ */
+function linkedin_archive_short_time($timestamp) {
+    $seconds = time() - (int) $timestamp;
+    if ($seconds < 0) {
+        return '';
+    }
+    // Ohne Wochenstufe: LinkedIn zählt den ersten Monat in Tagen durch (25d, 31d)
+    // und wechselt erst danach auf Monate.
+    foreach (array(
+        array(31536000, 'y'),
+        array(2592000,  'mo'),
+        array(86400,    'd'),
+        array(3600,     'h'),
+        array(60,       'm'),
+    ) as $unit) {
+        if ($seconds >= $unit[0]) {
+            return ((int) floor($seconds / $unit[0])) . $unit[1];
+        }
+    }
+    return 'jetzt';
+}
+
+/**
  * Verlinkt #hashtags auf die LinkedIn-Hashtagsuche.
  *
  * Läuft nur über Textabschnitte ausserhalb von <a>-Elementen, damit bereits
@@ -146,6 +171,27 @@ function linkedin_archive_prepare_content($html) {
         $result .= $anchor_depth > 0 ? $part : linkedin_archive_linkify_hashtags($part);
     }
     return $result;
+}
+
+/**
+ * Graue Strich-Icons für Reaktionen und Kommentare.
+ *
+ * Emoji (👍 💬) bringen ihre Farbe aus der Systemschrift mit und lassen sich
+ * per CSS nicht entfärben. Diese SVGs erben über currentColor die Textfarbe
+ * der Fussleiste.
+ */
+function linkedin_archive_stat_icon($name) {
+    $paths = array(
+        'like' => 'M2 20h2.5V9H2v11zm19.8-9.2c0-.9-.8-1.7-1.7-1.7h-5.3l.8-3.8v-.3c0-.4-.1-.7-.4-.9L14.3 3 8.6 8.7c-.3.3-.5.7-.5 1.2v8.4c0 .9.8 1.7 1.7 1.7h7.6c.7 0 1.3-.4 1.6-1l2.6-6c.1-.2.1-.4.1-.6v-1.6z',
+        'repost' => 'M6.5 4h9.6l-2-2 1.4-1.4L19.9 5l-4.4 4.4-1.4-1.4 2-2H6.5c-1.4 0-2.5 1.1-2.5 2.5V12H2V8.5C2 6 4 4 6.5 4zm11 6H22v3.5c0 2.5-2 4.5-4.5 4.5H7.9l2 2-1.4 1.4L4.1 17l4.4-4.4 1.4 1.4-2 2h9.6c1.4 0 2.5-1.1 2.5-2.5V10z',
+        'comment' => 'M12 2.5C6.5 2.5 2 6.2 2 10.8c0 2.5 1.3 4.8 3.4 6.3v4.4l4-2.6c.8.2 1.7.3 2.6.3 5.5 0 10-3.7 10-8.4S17.5 2.5 12 2.5z',
+    );
+    if (!isset($paths[$name])) {
+        return '';
+    }
+    return '<svg class="li-archive-stat-icon" viewBox="0 0 24 24" width="16" height="16" '
+        . 'aria-hidden="true" focusable="false"><path fill="currentColor" d="'
+        . $paths[$name] . '"/></svg>';
 }
 
 function linkedin_archive_logo_svg() {
@@ -210,17 +256,17 @@ add_shortcode('linkedin_archive', function ($attributes) {
       .li-archive-col{display:contents}
     }
     .li-archive-card{background:#fff;border:1px solid #e7eaf0;border-radius:12px;box-shadow:0 5px 25px rgba(0,0,0,.055);overflow:hidden;display:flex;flex-direction:column}
-    .li-archive-card__header{display:flex;align-items:center;gap:12px;padding:18px 20px 14px}
-    .li-archive-card__avatar{width:48px;height:48px;border-radius:50%;object-fit:cover;flex:0 0 auto;background:#e7eaf0}
+    .li-archive-card__header{display:flex;align-items:center;gap:10px;padding:14px 16px 12px}
+    .li-archive-card__avatar{width:40px;height:40px;border-radius:50%;object-fit:cover;flex:0 0 auto;background:#e7eaf0}
     .li-archive-card__avatar--initials{display:flex;align-items:center;justify-content:center;background:#0a66c2;color:#fff;font-weight:600;font-size:1.05rem;letter-spacing:.02em}
     .li-archive-card__identity{min-width:0;line-height:1.35}
     .li-archive-card__author{font-weight:600;color:#1b1f24;text-decoration:none;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .li-archive-card__author:hover{text-decoration:underline}
-    .li-archive-card__time{font-size:.82rem;color:#6b7481}
+    .li-archive-card__time{margin-left:auto;flex:0 0 auto;align-self:flex-start;font-size:.8rem;color:#8a94a0;white-space:nowrap}
     .li-archive-card__media{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:3px;background:#edf0f4}
     /* Deckel gegen Hochformate, die sonst die ganze Karte füllen. */
     .li-archive-card__media img,.li-archive-card__media video{width:100%;height:auto;display:block;max-height:520px;object-fit:cover}
-    .li-archive-card__body{padding:18px 20px;flex:1 1 auto}
+    .li-archive-card__body{padding:14px 16px;flex:1 1 auto}
     /* LinkedIn liefert Absätze im Fliesstext als echte Zeilenumbrüche, nicht als
        <br>. Ohne pre-line würden sie im Browser zu Leerzeichen zusammenfallen. */
     .li-archive-card__text{line-height:1.6;color:#1b1f24;overflow-wrap:anywhere;white-space:pre-line}
@@ -228,8 +274,19 @@ add_shortcode('linkedin_archive', function ($attributes) {
     .li-archive-card__text p:last-child{margin-bottom:0}
     .li-archive-card__text a{color:#0a66c2;text-decoration:none}
     .li-archive-card__text a:hover{text-decoration:underline}
-    .li-archive-card__footer{margin-top:auto;display:flex;align-items:center;gap:16px;padding:12px 20px;border-top:1px solid #edf0f4;font-size:.88rem;color:#66707d}
-    .li-archive-card__stat{display:inline-flex;align-items:center;gap:5px}
+    .li-archive-reshare{margin-top:14px;border:1px solid #e7eaf0;border-radius:8px;padding:12px 14px;background:#f8f9fb}
+    .li-archive-reshare__head{display:flex;align-items:center;gap:7px;font-size:.84rem;color:#66707d;margin-bottom:8px}
+    .li-archive-reshare__head a{color:#0a66c2;text-decoration:none;font-weight:600}
+    .li-archive-reshare__head a:hover{text-decoration:underline}
+    .li-archive-reshare__text{line-height:1.55;font-size:.94rem;color:#3d454f;overflow-wrap:anywhere;white-space:pre-line}
+    .li-archive-reshare__text p{margin:0 0 .7em}
+    .li-archive-reshare__text p:last-child{margin-bottom:0}
+    .li-archive-reshare__text a{color:#0a66c2;text-decoration:none}
+    .li-archive-reshare__text a:hover{text-decoration:underline}
+    .li-archive-card__footer{margin-top:auto;display:flex;align-items:center;gap:16px;padding:10px 16px;border-top:1px solid #edf0f4;font-size:.88rem;color:#66707d}
+    .li-archive-card__stat{display:inline-flex;align-items:center;gap:6px;color:#8a94a0}
+    .li-archive-stat-icon{display:block;flex:0 0 auto}
+    .li-archive-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
     .li-archive-card__link{margin-left:auto;display:inline-flex;align-items:center;color:#0a66c2;text-decoration:none}
     .li-archive-card__link:hover{color:#004182}
     .li-archive-logo{display:block}
@@ -278,13 +335,13 @@ add_shortcode('linkedin_archive', function ($attributes) {
                             <span class="li-archive-card__author"><?php echo esc_html($author); ?></span>
                         <?php endif; ?>
                     <?php endif; ?>
-                    <?php if ($timestamp) : ?>
-                        <time class="li-archive-card__time" datetime="<?php echo esc_attr(gmdate('c', $timestamp)); ?>"
-                              title="<?php echo esc_attr(wp_date(get_option('date_format') . ' ' . get_option('time_format'), $timestamp)); ?>">
-                            <?php echo esc_html(linkedin_archive_relative_time($timestamp)); ?>
-                        </time>
-                    <?php endif; ?>
                 </div>
+                <?php if ($timestamp) : ?>
+                    <time class="li-archive-card__time" datetime="<?php echo esc_attr(gmdate('c', $timestamp)); ?>"
+                          title="<?php echo esc_attr(linkedin_archive_relative_time($timestamp) . ' — ' . wp_date(get_option('date_format') . ' ' . get_option('time_format'), $timestamp)); ?>">
+                        <?php echo esc_html(linkedin_archive_short_time($timestamp)); ?>
+                    </time>
+                <?php endif; ?>
             </header>
 
             <?php if (!empty($post['media'])) : ?>
@@ -304,14 +361,37 @@ add_shortcode('linkedin_archive', function ($attributes) {
 
             <div class="li-archive-card__body">
                 <div class="li-archive-card__text"><?php echo $body; ?></div>
+                <?php if (!empty($post['reshare_author'])) : ?>
+                    <div class="li-archive-reshare">
+                        <div class="li-archive-reshare__head">
+                            <?php echo linkedin_archive_stat_icon('repost'); ?>
+                            <span>Beitrag geteilt von
+                            <?php if (!empty($post['reshare_author_url'])) : ?>
+                                <a href="<?php echo esc_url($post['reshare_author_url']); ?>"
+                                   target="_blank" rel="noopener noreferrer"><?php
+                                   echo esc_html($post['reshare_author']); ?></a>
+                            <?php else : ?>
+                                <?php echo esc_html($post['reshare_author']); ?>
+                            <?php endif; ?></span>
+                        </div>
+                        <?php if (!empty($post['reshare_html'])) : ?>
+                            <div class="li-archive-reshare__text"><?php
+                                echo linkedin_archive_prepare_content(wp_kses_post($post['reshare_html'])); ?></div>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
             </div>
 
             <footer class="li-archive-card__footer">
                 <?php if (isset($post['reaction_count']) && null !== $post['reaction_count']) : ?>
-                    <span class="li-archive-card__stat">👍 <?php echo esc_html(number_format_i18n((int) $post['reaction_count'])); ?></span>
+                    <span class="li-archive-card__stat"><?php echo linkedin_archive_stat_icon('like'); ?><?php
+                        echo esc_html(number_format_i18n((int) $post['reaction_count'])); ?><span
+                        class="li-archive-sr">&nbsp;Reaktionen</span></span>
                 <?php endif; ?>
                 <?php if (isset($post['comment_count']) && null !== $post['comment_count']) : ?>
-                    <span class="li-archive-card__stat">💬 <?php echo esc_html(number_format_i18n((int) $post['comment_count'])); ?></span>
+                    <span class="li-archive-card__stat"><?php echo linkedin_archive_stat_icon('comment'); ?><?php
+                        echo esc_html(number_format_i18n((int) $post['comment_count'])); ?><span
+                        class="li-archive-sr">&nbsp;Kommentare</span></span>
                 <?php endif; ?>
                 <?php if ($permalink) : ?>
                     <a class="li-archive-card__link" href="<?php echo esc_url($permalink); ?>"

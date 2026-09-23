@@ -40,6 +40,10 @@ class PostPage:
     reaction_count: int | None = None
     comment_count: int | None = None
     published_at: datetime | None = None
+    reshare_author: str | None = None
+    reshare_author_url: str | None = None
+    reshare_text: str | None = None
+    reshare_html: str | None = None
 
 
 def public_count(element):
@@ -59,6 +63,10 @@ def public_count(element):
 def media_key(url: str) -> str:
     p = urlsplit(url)
     match = re.search(r'/dms/(image|video)(?:/v2)?/([^/]+)', p.path)
+    if not match:
+        # Videovarianten liegen unter /playlist/vid/v2/<Asset-ID>/mp4-720p-...
+        # Über die Asset-ID bleibt die Identität über alle Bitraten hinweg gleich.
+        match = re.search(r'/playlist/(vid)(?:/v2)?/([^/]+)', p.path)
     stable = ':'.join(match.groups()) if match else p.netloc + p.path
     return hashlib.sha256(stable.encode()).hexdigest()
 
@@ -76,6 +84,16 @@ def parse_page(html: str, source_url: str, expected_key: str,
     if commentary is None:
         raise PageUnavailable('Post commentary markup not found')
     safe_html, text, links = render_fragment(str(commentary), source_url)
+
+    # Ein Repost verschachtelt den geteilten Beitrag als eigenes <article>.
+    # Dessen Bild/Video IST der Inhalt des Reposts und gehört dazu; andere
+    # verschachtelte Artikel (Empfehlungen, fremde Beiträge) weiterhin nicht.
+    reshare = card.select_one('article.feed-reshare-content')
+
+    def belongs(node) -> bool:
+        parent = node.find_parent('article')
+        return parent is card or (reshare is not None and parent is reshare)
+
     media, seen = [], set()
 
     def add(url, kind, role='attachment', alt=''):
@@ -103,7 +121,7 @@ def parse_page(html: str, source_url: str, expected_key: str,
 
     # Only the post's media container, never author avatars or comment images.
     for img in card.select('[data-test-id="feed-images-content"] img'):
-        if img.find_parent('article') is not card:
+        if not belongs(img):
             continue
         candidates = []
         for part in img.get('srcset', '').split(','):
@@ -117,9 +135,10 @@ def parse_page(html: str, source_url: str, expected_key: str,
         url = max(candidates)[1] if candidates else img.get('data-delayed-url') or img.get('src')
         add(url, 'image', alt=img.get('alt', ''))
     for video in card.select('video'):
-        if video.find_parent('article') is not card:
+        if not belongs(video):
             continue
-        add(video.get('poster'), 'image', 'poster')
+        # Das sichtbare Vorschaubild steckt oft nur in data-poster-url.
+        add(video.get('poster') or video.get('data-poster-url'), 'image', 'poster')
         sources = [video.get('src')] + [s.get('src') for s in video.select('source')]
         try:
             encoded_sources = json.loads(video.get('data-sources', '[]'))
@@ -127,18 +146,42 @@ def parse_page(html: str, source_url: str, expected_key: str,
             encoded_sources = []
         if isinstance(encoded_sources, list):
             # Some public players expose the same direct URLs as JSON attributes.
+            # Dieselbe Aufnahme liegt dort in mehreren Bitraten; nur die höchste
+            # sichern, sonst landet jedes Video mehrfach im Archiv.
+            best, best_rate = None, -1
             for entry in encoded_sources:
-                if isinstance(entry, dict) and isinstance(entry.get('src'), str):
-                    sources.append(entry['src'])
+                if not isinstance(entry, dict) or not isinstance(entry.get('src'), str):
+                    continue
+                try:
+                    rate = int(entry.get('data-bitrate', 0))
+                except (TypeError, ValueError):
+                    rate = 0
+                if rate > best_rate:
+                    best, best_rate = entry['src'], rate
+            if best:
+                sources.append(best)
         for url in sources:
             if url:
                 add(url, 'stream' if '.m3u8' in url or '.mpd' in url else 'video')
     for anchor in card.select('a[href]'):
-        if anchor.find_parent('article') is not card:
+        if not belongs(anchor):
             continue
         href = anchor.get('href', '')
         if urlsplit(href).path.lower().endswith('.pdf'):
             add(href, 'document', alt=anchor.get_text(strip=True))
+    reshare_author = reshare_author_url = reshare_text = reshare_html = None
+    if reshare is not None:
+        lockup = reshare.select_one('[data-test-id="feed-reshare-content__entity-lockup"]')
+        if lockup is not None:
+            # Der erste Anker ist das Profilbild ohne Text, der zweite der Name.
+            named = [a for a in lockup.select('a[href]') if a.get_text(strip=True)]
+            if named:
+                reshare_author = named[0].get_text(' ', strip=True) or None
+                reshare_author_url = clean_url(named[0].get('href', ''), source_url)
+        original = reshare.select_one('[data-test-id="feed-reshare-content__commentary"]')
+        if original is not None:
+            reshare_html, reshare_text, _ = render_fragment(str(original), source_url)
+
     canonical = soup.select_one('link[rel="canonical"]')
     canonical_url = clean_url(canonical.get('href', ''), source_url) if canonical else source_url
     reaction_count = public_count(card.select_one('[data-test-id="social-actions__reaction-count"]'))
@@ -175,7 +218,9 @@ def parse_page(html: str, source_url: str, expected_key: str,
     return PostPage(text, safe_html, links, media, str(commentary),
                     card.get('data-activity-urn'),
                     canonical_url, reaction_count=reaction_count,
-                    comment_count=comment_count, published_at=published_at)
+                    comment_count=comment_count, published_at=published_at,
+                    reshare_author=reshare_author, reshare_author_url=reshare_author_url,
+                    reshare_text=reshare_text, reshare_html=reshare_html)
 
 
 class PageReader:

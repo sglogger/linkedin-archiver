@@ -149,3 +149,46 @@ def test_document_host_added_to_media_allowed_hosts_is_archived():
                       ('licdn.com', 'linkedin.com', 'sbs.ox.ac.uk'))
     assert [m['kind'] for m in page.media] == ['image', 'document']
     assert page.media[1]['source_url'].endswith('report.pdf')
+
+
+RESHARE = Path(__file__).parent / 'fixtures/reshare.html'
+RESHARE_KEY = 'urn:li:ugcPost:7498798815765000192'
+RESHARE_URL = 'https://www.linkedin.com/feed/update/urn%3Ali%3AugcPost%3A7498798815765000192'
+
+
+def test_repost_keeps_the_shared_posts_media():
+    # Der geteilte Beitrag liegt in einem verschachtelten <article class="…
+    # feed-reshare-content">. Sein Video IST der Inhalt des Reposts.
+    page = parse_page(RESHARE.read_text(), RESHARE_URL, RESHARE_KEY)
+    kinds = [m['kind'] for m in page.media]
+    assert 'video' in kinds, kinds
+    assert 'image' in kinds, 'Vorschaubild aus data-poster-url fehlt'
+
+
+def test_repost_records_the_original_author_and_text():
+    page = parse_page(RESHARE.read_text(), RESHARE_URL, RESHARE_KEY)
+    assert page.reshare_author == 'Andreas Ott'
+    assert page.reshare_author_url == 'https://ch.linkedin.com/in/andreas-ott-46284896'
+    assert 'VoIP' in (page.reshare_text or '')
+    # Der eigene Kommentar darf nicht mit dem geteilten Text vermischt werden.
+    assert 'VoIP' not in page.text
+    assert 'ex-Kollegen' in page.text
+
+
+def test_only_the_highest_video_bitrate_is_archived():
+    # LinkedIn bietet dieselbe Aufnahme als 640p und 720p an.
+    page = parse_page(RESHARE.read_text(), RESHARE_URL, RESHARE_KEY)
+    videos = [m['source_url'] for m in page.media if m['kind'] == 'video']
+    assert len(videos) == 1, videos
+    assert '720p' in videos[0]
+
+
+def test_video_identity_survives_a_bitrate_change():
+    a = 'https://dms.licdn.com/playlist/vid/v2/D4E05AQFMJDicACYCsg/mp4-640p-30fp-crf28/x/1?e=1'
+    b = 'https://dms.licdn.com/playlist/vid/v2/D4E05AQFMJDicACYCsg/mp4-720p-30fp-crf28/y/2?e=2'
+    assert media_key(a) == media_key(b)
+
+
+def test_a_plain_post_reports_no_reshare():
+    page = parse_page(FIXTURE.read_text(), URL, KEY)
+    assert page.reshare_author is None and page.reshare_html is None

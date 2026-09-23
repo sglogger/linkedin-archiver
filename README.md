@@ -381,7 +381,9 @@ ist eine WordPress-Seite mit einem Juicer-Embed. Das mitgelieferte Plugin
 [`wordpress/linkedin-archive.php`](wordpress/linkedin-archive.php) ersetzt es
 durch eigene Beitragskarten in einem mehrspaltigen Masonry-Layout:
 
-- Kopfzeile mit Profilbild, Name und relativer Zeitangabe („vor 3 Tagen“).
+- Kopfzeile mit Profilbild und Name links, kompakter Zeitangabe rechts
+  (`25d`, `3mo`, wie auf LinkedIn). Das ausgeschriebene Datum steht im
+  Tooltip.
 - Darunter die Bilder, dann der Beitragstext.
 - Fussleiste mit Reaktions- und Kommentarzahl sowie dem LinkedIn-Logo unten
   rechts, das den Beitrag auf LinkedIn öffnet.

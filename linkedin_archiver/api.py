@@ -88,7 +88,8 @@ def website_post(post, base_url):
     result = {key: post[key] for key in (
         'post_key', 'source_url', 'canonical_url', 'published_at', 'visibility',
         'content_text', 'content_html', 'content_source', 'reaction_count',
-        'comment_count', 'engagement_updated_at', 'links')}
+        'comment_count', 'engagement_updated_at', 'links',
+        'reshare_author', 'reshare_author_url', 'reshare_html')}
     for name in ('published_at', 'engagement_updated_at'):
         if isinstance(result[name], datetime):
             result[name] = result[name].isoformat() + 'Z'

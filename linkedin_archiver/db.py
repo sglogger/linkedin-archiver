@@ -59,6 +59,10 @@ class Database:
             'reaction_count': 'INT UNSIGNED NULL',
             'comment_count': 'INT UNSIGNED NULL',
             'engagement_updated_at': 'DATETIME(3) NULL',
+            'reshare_author': 'VARCHAR(255) NULL',
+            'reshare_author_url': 'TEXT NULL',
+            'reshare_text': 'LONGTEXT NULL',
+            'reshare_html': 'LONGTEXT NULL',
         }.items():
             if name not in existing:
                 self.execute(f'ALTER TABLE posts ADD COLUMN {name} {definition}')
@@ -134,10 +138,13 @@ class Database:
             reaction_count=COALESCE(%s,reaction_count),comment_count=COALESCE(%s,comment_count),
             engagement_updated_at=IF(%s IS NOT NULL OR %s IS NOT NULL,%s,engagement_updated_at),
             published_at=COALESCE(published_at,%s),
+            reshare_author=%s,reshare_author_url=%s,reshare_text=%s,reshare_html=%s,
             enriched_at=%s,enrichment_error=NULL WHERE id=%s''',
             (page.text, page.html, page.fragment, page.activity_urn, page.canonical_url,
              page.publicly_accessible, page.reaction_count, page.comment_count,
-             page.reaction_count, page.comment_count, now(), page.published_at, now(), post_id))
+             page.reaction_count, page.comment_count, now(), page.published_at,
+             page.reshare_author, page.reshare_author_url, page.reshare_text, page.reshare_html,
+             now(), post_id))
         self.execute('DELETE FROM post_links WHERE post_id=%s', (post_id,))
         for link in page.links:
             self.execute('INSERT INTO post_links (post_id,position,label,url,kind) VALUES (%s,%s,%s,%s,%s)',
@@ -174,7 +181,8 @@ class Database:
             args = (post_key,)
         fields = ('post_key,source_url,canonical_url,published_at,visibility,content_text,content_html,'
                   'content_source,publicly_accessible,publish_enabled,enrichment_status,'
-                  'reaction_count,comment_count,engagement_updated_at,id')
+                  'reaction_count,comment_count,engagement_updated_at,'
+                  'reshare_author,reshare_author_url,reshare_text,reshare_html,id')
         if include_raw:
             fields += ',api_text,raw_snapshot,raw_event,raw_page_fragment,activity_urn,author_urn'
         sql = f'SELECT {fields} FROM posts WHERE deleted_at IS NULL{condition} ORDER BY published_at DESC,id DESC'
