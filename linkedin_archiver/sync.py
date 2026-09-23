@@ -118,12 +118,15 @@ class Sync:
         try:
             if api_enabled:
                 # A temporarily unavailable snapshot must not stop the ongoing changelog.
-                for fn in (lambda: self.snapshot(force_snapshot), self.changes):
+                for phase, fn in (('snapshot', lambda: self.snapshot(force_snapshot)),
+                                  ('changelog', self.changes)):
                     try:
                         fn()
                     except Exception as exc:
                         success = False
-                        log.error('API sync: %s', safe_error(exc))
+                        # Naming the phase covers every failure, not just ApiError.
+                        log.error('API sync (%s): %s', phase, safe_error(exc))
+                        log.debug('%s phase failed', phase, exc_info=True)
             self.enrich(stop)
             with self.db.transaction():
                 self.db.set_state('last_cycle', datetime.now(timezone.utc).isoformat())

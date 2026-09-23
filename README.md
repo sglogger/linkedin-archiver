@@ -132,6 +132,7 @@ einen Chat kopierter Token sollte widerrufen und ersetzt werden.
 | `PAGE_ENRICHMENT_ENABLED` | true | Seiten für Links und Medien lesen |
 | `BROWSER_FALLBACK_ENABLED` | true | Chromium versuchen, wenn HTTP nicht reicht |
 | `BROWSER_STORAGE_STATE` | leer | Optional `/run/secrets/linkedin-state.json` |
+| `AUTO_PUBLISH` | false | Neu eingelesene Beiträge sofort freigeben, statt einzeln mit `publish` |
 | `DOWNLOAD_MEDIA` | true | Erreichbare Mediendateien dauerhaft herunterladen |
 | `MAX_MEDIA_SIZE_MB` | 100 | Obergrenze pro Datei |
 | `MEDIA_ALLOWED_HOSTS` | licdn.com,linkedin.com | Erlaubte Medienhosts, inklusive Subdomains |
@@ -291,6 +292,33 @@ docker compose cp archive:/data/export/website.json ./website.json
 `publish` ändert nur die Auswahl in der eigenen Datenbank. Es veröffentlicht
 nichts auf LinkedIn oder einer Website. Mit `publish <URN> --disable` rückgängig machen.
 
+### Alle neuen Beiträge automatisch freigeben
+
+Wer die Einzelauswahl nicht will, setzt `AUTO_PUBLISH=true` in `.env` und
+erstellt den Container neu. Jeder danach **neu** eingelesene Beitrag ist sofort
+über die Website-Endpunkte und `export --published-only` verfügbar.
+
+Damit entfällt die Kontrolle pro Beitrag: Auch Beiträge mit Sichtbarkeit
+`MEMBER_NETWORK`, die auf LinkedIn nur das eigene Netzwerk sieht, landen dann
+automatisch auf der öffentlichen Website.
+
+Die Einstellung wirkt nur beim erstmaligen Anlegen eines Beitrags:
+
+- Bereits archivierte Beiträge bleiben unverändert und brauchen weiterhin `publish`.
+- Ein mit `publish <URN> --disable` zurückgezogener Beitrag wird durch einen
+  späteren Snapshot- oder Changelog-Abgleich nicht wieder freigegeben.
+- Gelöschte Beiträge werden nie freigegeben.
+
+Den vorhandenen Bestand gibt `AUTO_PUBLISH` nicht nachträglich frei. Falls das
+gewünscht ist, einmalig in MariaDB:
+
+```bash
+docker compose exec -T db sh -c \
+  'exec mariadb -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" "$MARIADB_DATABASE"' <<'SQL'
+UPDATE posts SET publish_enabled = TRUE WHERE deleted_at IS NULL;
+SQL
+```
+
 Jeder JSON-Beitrag enthält `post_key`, URLs, Zeitpunkt, Sichtbarkeit, `content_html`,
 `content_text`, `links` und `media`. Medien haben `local_url` wie
 `/media/ab/abcdef….jpg`. Die Website kann das Medienverzeichnis unter `/media/`
@@ -314,7 +342,7 @@ Rohdaten sind für spätere erneute Verarbeitung gedacht, nicht als fertiges HTM
 
 Der Compose-Dienst `api` liest nur Daten. Er zeigt standardmässig **keine**
 Beiträge: Erst `publish <URN>` gibt einen Beitrag für Website-Endpunkte und
-Mediendateien frei. Gelöschte Beiträge erscheinen dort nicht. Die API ist
+Mediendateien frei — oder `AUTO_PUBLISH=true` für alle neu eingelesenen. Gelöschte Beiträge erscheinen dort nicht. Die API ist
 zunächst nur auf dem Docker-Host unter `http://127.0.0.1:8080` erreichbar.
 
 | Endpunkt | Ergebnis |

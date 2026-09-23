@@ -116,3 +116,44 @@ def test_publication_is_opt_in_and_lock_prevents_concurrent_sync(db):
     finally:
         other.close()
         db.unlock()
+
+
+def test_auto_publish_applies_to_new_posts_only(db):
+    with db.transaction():
+        db.upsert_post(sample())
+    assert db.rows('SELECT publish_enabled FROM posts WHERE post_key=%s', (KEY,))[0]['publish_enabled'] == 0
+
+    db.auto_publish = True
+    with db.transaction():
+        db.upsert_post(replace_share(KEY, 'urn:li:share:111'))
+    assert db.rows('SELECT publish_enabled FROM posts WHERE post_key=%s', ('urn:li:share:111',))[0]['publish_enabled'] == 1
+
+    # An update to the already archived post must not flip it on retroactively.
+    with db.transaction():
+        db.upsert_post(sample())
+    assert db.rows('SELECT publish_enabled FROM posts WHERE post_key=%s', (KEY,))[0]['publish_enabled'] == 0
+
+
+def test_auto_publish_never_revives_a_withdrawn_or_deleted_post(db):
+    db.auto_publish = True
+    with db.transaction():
+        db.upsert_post(sample())
+        db.execute('UPDATE posts SET publish_enabled=FALSE WHERE post_key=%s', (KEY,))
+    # A later snapshot/changelog touch of the same post keeps the withdrawal.
+    with db.transaction():
+        db.upsert_post(sample())
+    assert db.rows('SELECT publish_enabled FROM posts WHERE post_key=%s', (KEY,))[0]['publish_enabled'] == 0
+
+    with db.transaction():
+        db.upsert_post({**sample(), 'post_key': 'urn:li:share:222',
+                        'source_url': 'https://www.linkedin.com/feed/update/urn:li:share:222',
+                        'deleted': True})
+    row = db.rows('SELECT publish_enabled,deleted_at FROM posts WHERE post_key=%s', ('urn:li:share:222',))[0]
+    assert row['publish_enabled'] == 0 and row['deleted_at'] is not None
+
+
+def replace_share(old, new):
+    post = sample()
+    post['post_key'] = new
+    post['source_url'] = post['source_url'].replace(old, new)
+    return post

@@ -65,3 +65,36 @@ def test_download_client_has_no_api_credentials():
     public = PublicHttp()
     assert 'Authorization' not in public.session.headers
     assert not public.session.trust_env
+
+
+def test_api_error_keeps_linkedin_wording_out_of_its_text_but_available():
+    error = ApiError(404, 'No data found for this memberId', 'snapshot')
+    assert error.no_data and error.endpoint == 'snapshot'
+    assert error.message == 'No data found for this memberId'
+    # The member-identifying wording must not reach INFO/ERROR logs via str().
+    assert 'memberId' not in str(error)
+    assert str(error) == 'LinkedIn API request failed (HTTP 404)'
+
+
+def test_failing_request_names_the_endpoint_and_debug_logs_the_body(caplog):
+    import logging
+    api = LinkedInAPI('TOP_SECRET')
+    response = Mock(status_code=404, text='{"message":"No data found for this memberId","status":404}')
+    response.json.return_value = {'message': 'No data found for this memberId', 'status': 404}
+    api.session = Mock(get=Mock(return_value=response))
+    with caplog.at_level(logging.DEBUG, logger='linkedin_archiver.network'):
+        with pytest.raises(ApiError) as caught:
+            api.get('/rest/memberSnapshotData', {'q': 'criteria'})
+    assert caught.value.endpoint == 'snapshot' and caught.value.no_data
+    assert 'snapshot endpoint returned HTTP 404' in caplog.text
+    assert 'TOP_SECRET' not in caplog.text
+
+
+def test_changelog_endpoint_is_named_even_when_following_a_next_link():
+    api = LinkedInAPI('test')
+    response = Mock(status_code=404, text='{}')
+    response.json.return_value = {}
+    api.session = Mock(get=Mock(return_value=response))
+    with pytest.raises(ApiError) as caught:
+        api.get('/rest/memberChangeLogs?start=50&q=memberAndApplication')
+    assert caught.value.endpoint == 'changelog'

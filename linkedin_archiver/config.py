@@ -39,6 +39,7 @@ class Settings:
     browser_enabled: bool = True
     scrape_enabled: bool = True
     media_enabled: bool = True
+    auto_publish: bool = False
     browser_state: str = ""
     media_dir: Path = Path("/data/media")
     export_dir: Path = Path("/data/export")
@@ -69,6 +70,7 @@ class Settings:
             browser_enabled=boolean("BROWSER_FALLBACK_ENABLED"),
             scrape_enabled=boolean("PAGE_ENRICHMENT_ENABLED"),
             media_enabled=boolean("DOWNLOAD_MEDIA"),
+            auto_publish=boolean("AUTO_PUBLISH", False),
             browser_state=os.getenv("BROWSER_STORAGE_STATE", ""),
             media_dir=Path(os.getenv("MEDIA_DIR", "/data/media")),
             export_dir=Path(os.getenv("EXPORT_DIR", "/data/export")),

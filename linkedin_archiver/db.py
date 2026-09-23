@@ -17,6 +17,7 @@ def encoded(value):
 
 class Database:
     def __init__(self, settings):
+        self.auto_publish = settings.auto_publish
         self.conn = pymysql.connect(host=settings.db_host, port=settings.db_port,
             user=settings.db_user, password=settings.db_password, database=settings.db_name,
             charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor,
@@ -82,13 +83,16 @@ class Database:
         raw_column = 'raw_snapshot' if source == 'snapshot' else 'raw_event'
         text = post.get('content_text')
         if not existing:
+            # AUTO_PUBLISH only ever applies to a first insert, so a post that was
+            # deliberately withdrawn with `publish --disable` is never re-enabled.
             self.execute(f'''INSERT INTO posts
                 (post_key,source_url,published_at,visibility,author_urn,content_text,
-                 content_html,api_text,content_source,{raw_column})
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''',
+                 content_html,api_text,content_source,publish_enabled,{raw_column})
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''',
                 (post['post_key'], post['source_url'], post.get('published_at'),
                  post.get('visibility', 'UNKNOWN'), post.get('author_urn'), text or '',
-                 post.get('content_html') or '', text, source, encoded(post['raw'])))
+                 post.get('content_html') or '', text, source, self.auto_publish,
+                 encoded(post['raw'])))
         else:
             old = existing[0]
             changed = text is not None and text != old['api_text']

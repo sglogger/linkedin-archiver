@@ -1,9 +1,14 @@
 import ipaddress
+import logging
 import socket
 import time
 from urllib.parse import parse_qs, urljoin, urlsplit
 
 import requests
+
+log = logging.getLogger(__name__)
+
+ENDPOINTS = {'/rest/memberSnapshotData': 'snapshot', '/rest/memberChangeLogs': 'changelog'}
 
 
 class FetchError(RuntimeError):
@@ -68,8 +73,12 @@ class PublicHttp:
 
 
 class ApiError(RuntimeError):
-    def __init__(self, status: int, message: str = ''):
+    def __init__(self, status: int, message: str = '', endpoint: str = ''):
         self.status = status
+        # Kept off the exception text: LinkedIn's wording is what decides whether a
+        # 404 means "nothing prepared yet", but it can name the member. DEBUG only.
+        self.message = message
+        self.endpoint = endpoint
         self.no_data = 'no data found for this member' in message.lower()
         description = {401: 'Token expired or invalid', 403: 'Token lacks permission',
                        429: 'LinkedIn rate limit reached'}.get(status, 'LinkedIn API request failed')
@@ -109,13 +118,18 @@ class LinkedInAPI:
                 time.sleep(delay)
                 continue
             if response.status_code != 200:
+                status = response.status_code
+                body = response.text[:500]
                 try:
-                    message = response.json().get('message', '')
+                    payload = response.json()
+                    message = payload.get('message', '') if isinstance(payload, dict) else ''
                 except ValueError:
                     message = ''
-                status = response.status_code
                 response.close()
-                raise ApiError(status, message)
+                endpoint = ENDPOINTS.get(p.path, p.path)
+                # The body can carry the member URN, so it stays out of INFO/ERROR logs.
+                log.debug('%s endpoint returned HTTP %s: %s', endpoint, status, body)
+                raise ApiError(status, message, endpoint)
             try:
                 result = response.json()
             except ValueError as exc:
