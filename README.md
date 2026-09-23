@@ -380,9 +380,17 @@ responsive Beitragskarten mit Bildern, Links, Datum und Reaktions-/Kommentarzahl
 Es holt die freigegebenen JSON-Daten serverseitig und speichert die Antwort fünf
 Minuten im WordPress-Cache.
 
-1. `wordpress/linkedin-archive.php` auf dem WordPress-Server als
-   `wp-content/plugins/linkedin-archive-feed/linkedin-archive.php` ablegen und
-   im Adminbereich aktivieren.
+1. Installationspaket bauen und im Adminbereich unter „Plugins → Installieren →
+   Plugin hochladen“ einspielen, danach aktivieren:
+
+   ```bash
+   ./wordpress/build-plugin.sh
+   ```
+
+   Das Skript legt `dist/linkedin-archive-feed-<Version>.zip` an. Die Version
+   liest es aus dem Plugin-Header; WordPress erkennt ein Update nur, wenn sie
+   dort erhöht wurde. Alternativ `wordpress/linkedin-archive.php` von Hand als
+   `wp-content/plugins/linkedin-archive-feed/linkedin-archive.php` ablegen.
 2. Im `wp-config.php` die vom WordPress-Server erreichbare API-Basis setzen,
    zum Beispiel `define('LINKEDIN_ARCHIVE_API_BASE', 'https://www.glogger.ch/linkedin-api');`.
 3. Auf `/linkedin/` das bisherige Juicer-Embed durch den Shortcode
