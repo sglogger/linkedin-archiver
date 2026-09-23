@@ -111,19 +111,35 @@ function linkedin_archive_short_time($timestamp) {
 }
 
 /**
- * Verlinkt #hashtags auf die LinkedIn-Hashtagsuche.
+ * Verlinkt nackte URLs und #hashtags im Fliesstext.
+ *
+ * Beides in EINEM Durchgang, damit der Fragmentbezeichner einer URL
+ * (…/seite#oben) nicht anschliessend als Hashtag missdeutet wird.
  *
  * Läuft nur über Textabschnitte ausserhalb von <a>-Elementen, damit bereits
- * echte Hashtag-Links aus der Beitragsseite nicht verschachtelt werden.
+ * echte Links aus der Beitragsseite nicht verschachtelt werden. Nicht
+ * angereicherte Beiträge liefern ihren Text ohne jeden Anker — dort entstehen
+ * die Links erst hier.
  */
-function linkedin_archive_linkify_hashtags($text) {
+function linkedin_archive_linkify($text) {
     return preg_replace_callback(
-        '/(?<![\w&#])#([\p{L}\p{N}_]{2,80})/u',
+        '~(?<![\w&#])(?:(https?://[^\s<>"\'()\[\]]+)|\#([\p{L}\p{N}_]{2,80}))~u',
         function ($matches) {
-            $url = LINKEDIN_ARCHIVE_HASHTAG_BASE . rawurlencode($matches[1]);
+            if (isset($matches[1]) && '' !== $matches[1]) {
+                // Der Textabschnitt ist bereits HTML-kodiert: &amp; zurück in &,
+                // sonst landet ein kaputter Query-String im href.
+                $url = html_entity_decode($matches[1], ENT_QUOTES, 'UTF-8');
+                // Satzzeichen direkt hinter der URL gehören nicht zum Link.
+                $clean = rtrim($url, '.,;:!?\'"«»');
+                $tail = substr($url, strlen($clean));
+                return '<a class="li-archive-link" href="' . esc_url($clean)
+                    . '" target="_blank" rel="noopener noreferrer nofollow">'
+                    . esc_html($clean) . '</a>' . esc_html($tail);
+            }
+            $url = LINKEDIN_ARCHIVE_HASHTAG_BASE . rawurlencode($matches[2]);
             return '<a class="li-archive-hashtag" href="' . esc_url($url)
                 . '" target="_blank" rel="noopener noreferrer nofollow">#'
-                . esc_html($matches[1]) . '</a>';
+                . esc_html($matches[2]) . '</a>';
         },
         $text
     );
@@ -168,7 +184,7 @@ function linkedin_archive_prepare_content($html) {
             $result .= $part;
             continue;
         }
-        $result .= $anchor_depth > 0 ? $part : linkedin_archive_linkify_hashtags($part);
+        $result .= $anchor_depth > 0 ? $part : linkedin_archive_linkify($part);
     }
     return $result;
 }
@@ -272,7 +288,7 @@ add_shortcode('linkedin_archive', function ($attributes) {
     .li-archive-card__text{line-height:1.6;color:#1b1f24;overflow-wrap:anywhere;white-space:pre-line}
     .li-archive-card__text p{margin:0 0 .8em}
     .li-archive-card__text p:last-child{margin-bottom:0}
-    .li-archive-card__text a{color:#0a66c2;text-decoration:none}
+    .li-archive-card__text a{color:#0a66c2;text-decoration:none;overflow-wrap:anywhere}
     .li-archive-card__text a:hover{text-decoration:underline}
     .li-archive-reshare{margin-top:14px;border:1px solid #e7eaf0;border-radius:8px;padding:12px 14px;background:#f8f9fb}
     .li-archive-reshare__head{display:flex;align-items:center;gap:7px;font-size:.84rem;color:#66707d;margin-bottom:8px}
@@ -314,7 +330,7 @@ add_shortcode('linkedin_archive', function ($attributes) {
         if (!empty($post['content_html'])) {
             $body = linkedin_archive_prepare_content(wp_kses_post($post['content_html']));
         } else {
-            $body = linkedin_archive_linkify_hashtags(esc_html($post['content_text'] ?? ''));
+            $body = linkedin_archive_linkify(esc_html($post['content_text'] ?? ''));
         }
         ?>
         <article class="li-archive-card" style="order:<?php echo esc_attr($order); ?>">
