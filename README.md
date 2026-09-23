@@ -375,10 +375,21 @@ WordPress-HTML oder JavaScript. Fehlt `API_READ_KEY` oder ist er noch ein
 
 Die derzeitige Seite [glogger.ch/linkedin/](https://www.glogger.ch/linkedin/)
 ist eine WordPress-Seite mit einem Juicer-Embed. Das mitgelieferte Plugin
-[`wordpress/linkedin-archive.php`](wordpress/linkedin-archive.php) rendert
-responsive Beitragskarten mit Bildern, Links, Datum und Reaktions-/Kommentarzahl.
+[`wordpress/linkedin-archive.php`](wordpress/linkedin-archive.php) ersetzt es
+durch eigene Beitragskarten in einem mehrspaltigen Raster:
+
+- Kopfzeile mit Profilbild, Name und relativer Zeitangabe („vor 3 Tagen“).
+- Darunter die Bilder, dann der Beitragstext.
+- Fussleiste mit Reaktions- und Kommentarzahl sowie dem LinkedIn-Logo unten
+  rechts, das den Beitrag auf LinkedIn öffnet.
+- Erwähnungen und externe Links bleiben klickbar und öffnen in einem neuen Tab.
+  `#hashtags` werden auf die LinkedIn-Hashtagsuche verlinkt, auch wenn sie im
+  Archiv nur als Text vorliegen.
+- Lange Beiträge werden auf eine einstellbare Zeilenzahl gekürzt und bekommen
+  einen Link zum vollständigen Beitrag.
+
 Es holt die freigegebenen JSON-Daten serverseitig und speichert die Antwort fünf
-Minuten im WordPress-Cache.
+Minuten im WordPress-Cache. Auf schmalen Bildschirmen wird das Raster einspaltig.
 
 1. Installationspaket bauen und im Adminbereich unter „Plugins → Installieren →
    Plugin hochladen“ einspielen, danach aktivieren:
@@ -391,12 +402,39 @@ Minuten im WordPress-Cache.
    liest es aus dem Plugin-Header; WordPress erkennt ein Update nur, wenn sie
    dort erhöht wurde. Alternativ `wordpress/linkedin-archive.php` von Hand als
    `wp-content/plugins/linkedin-archive-feed/linkedin-archive.php` ablegen.
-2. Im `wp-config.php` die vom WordPress-Server erreichbare API-Basis setzen,
-   zum Beispiel `define('LINKEDIN_ARCHIVE_API_BASE', 'https://www.glogger.ch/linkedin-api');`.
+2. Im `wp-config.php` die vom WordPress-Server erreichbare API-Basis setzen und
+   Name sowie Profilbild hinterlegen:
+
+   ```php
+   define('LINKEDIN_ARCHIVE_API_BASE',     'https://linkedinapi.glogger.ch');
+   define('LINKEDIN_ARCHIVE_AUTHOR_NAME',  'Steven Glogger');
+   define('LINKEDIN_ARCHIVE_AUTHOR_IMAGE', 'https://www.glogger.ch/wp-content/uploads/steven.jpg');
+   define('LINKEDIN_ARCHIVE_AUTHOR_URL',   'https://www.linkedin.com/in/steven-glogger/');
+   ```
+
+   Name und Profilbild stehen bewusst hier und nicht in der Datenbank: Das
+   Archiv speichert nur die eigenen Beiträge und lädt keine Profilbilder
+   herunter. Alle Beiträge stammen ohnehin von derselben Person.
 3. Auf `/linkedin/` das bisherige Juicer-Embed durch den Shortcode
-   `[linkedin_archive limit="12"]` ersetzen und den WordPress-Seitencache leeren.
+   `[linkedin_archive limit="12" columns="2"]` ersetzen und den
+   WordPress-Seitencache leeren.
 4. Gewünschte Beiträge mit `docker compose exec archive python -m linkedin_archiver publish '<URN>'`
-   freigeben. Erst dann werden sie im Feed sichtbar.
+   freigeben. Erst dann werden sie im Feed sichtbar. Mit `AUTO_PUBLISH=true`
+   entfällt dieser Schritt für neue Beiträge.
+
+Alle Shortcode-Attribute:
+
+| Attribut | Standard | Bedeutung |
+|---|---:|---|
+| `limit` | 12 | Beiträge pro Seite, 1–100 |
+| `columns` | 2 | Spalten im Raster, 1–4; unter 860 px immer einspaltig |
+| `clamp` | 10 | Maximale Textzeilen je Karte; `0` schaltet das Kürzen ab |
+| `author` | Konstante | Überschreibt `LINKEDIN_ARCHIVE_AUTHOR_NAME` |
+| `avatar` | Konstante | Überschreibt `LINKEDIN_ARCHIVE_AUTHOR_IMAGE` |
+| `profile` | Konstante | Überschreibt `LINKEDIN_ARCHIVE_AUTHOR_URL` |
+
+Reaktions- und Kommentarzahl erscheinen nur, wenn sie im Archiv vorhanden sind;
+fehlende Werte werden weggelassen und nicht als Null dargestellt.
 
 Wenn WordPress und Docker auf demselben Host laufen, kann WordPress intern
 `http://127.0.0.1:8080` verwenden. Für Bilder im Browser braucht es zusätzlich

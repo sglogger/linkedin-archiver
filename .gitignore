@@ -31,3 +31,4 @@ dist/
 mariadb-data
 archive-data
 secrets
+docker-compose.steven.yml
