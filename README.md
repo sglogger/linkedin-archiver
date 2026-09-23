@@ -385,8 +385,7 @@ durch eigene Beitragskarten in einem mehrspaltigen Raster:
 - Erwähnungen und externe Links bleiben klickbar und öffnen in einem neuen Tab.
   `#hashtags` werden auf die LinkedIn-Hashtagsuche verlinkt, auch wenn sie im
   Archiv nur als Text vorliegen.
-- Lange Beiträge werden auf eine einstellbare Zeilenzahl gekürzt und bekommen
-  einen Link zum vollständigen Beitrag.
+- Der Beitragstext wird immer vollständig angezeigt, nie gekürzt.
 
 Es holt die freigegebenen JSON-Daten serverseitig und speichert die Antwort fünf
 Minuten im WordPress-Cache. Auf schmalen Bildschirmen wird das Raster einspaltig.
@@ -414,7 +413,8 @@ Minuten im WordPress-Cache. Auf schmalen Bildschirmen wird das Raster einspaltig
 
    Name und Profilbild stehen bewusst hier und nicht in der Datenbank: Das
    Archiv speichert nur die eigenen Beiträge und lädt keine Profilbilder
-   herunter. Alle Beiträge stammen ohnehin von derselben Person.
+   herunter. Alle Beiträge stammen ohnehin von derselben Person. Ohne
+   `AUTHOR_IMAGE` zeigt die Kopfzeile einen Kreis mit den Initialen.
 3. Auf `/linkedin/` das bisherige Juicer-Embed durch den Shortcode
    `[linkedin_archive limit="12" columns="2"]` ersetzen und den
    WordPress-Seitencache leeren.
@@ -428,7 +428,6 @@ Alle Shortcode-Attribute:
 |---|---:|---|
 | `limit` | 12 | Beiträge pro Seite, 1–100 |
 | `columns` | 2 | Spalten im Raster, 1–4; unter 860 px immer einspaltig |
-| `clamp` | 10 | Maximale Textzeilen je Karte; `0` schaltet das Kürzen ab |
 | `author` | Konstante | Überschreibt `LINKEDIN_ARCHIVE_AUTHOR_NAME` |
 | `avatar` | Konstante | Überschreibt `LINKEDIN_ARCHIVE_AUTHOR_IMAGE` |
 | `profile` | Konstante | Überschreibt `LINKEDIN_ARCHIVE_AUTHOR_URL` |

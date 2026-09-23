@@ -2,7 +2,7 @@
 /**
  * Plugin Name: LinkedIn Archive Feed
  * Description: Zeigt freigegebene Beiträge aus dem eigenen LinkedIn-Archiv über [linkedin_archive] an.
- * Version: 2.0.0
+ * Version: 2.1.0
  */
 
 if (!defined('ABSPATH')) {
@@ -24,28 +24,20 @@ if (!defined('ABSPATH')) {
 
 const LINKEDIN_ARCHIVE_HASHTAG_BASE = 'https://www.linkedin.com/feed/hashtag/?keywords=';
 
-/** Grobe Zeichenzahl pro Textzeile in einer zweispaltigen Karte. */
-const LINKEDIN_ARCHIVE_CHARS_PER_LINE = 55;
-
 /**
- * Schätzt, ob der Text über die erlaubte Zeilenzahl hinausgeht.
+ * Initialen als Rückfall, wenn kein Profilbild konfiguriert ist.
  *
- * CSS kann zwar kürzen, aber nicht mitteilen, ob es gekürzt hat. Ohne diese
- * Schätzung stünde «Ganzen Beitrag lesen» auch unter einem Dreizeiler.
+ * Besser ein gefüllter Kreis mit Initialen als eine Lücke, wo das Bild hingehört.
  */
-function linkedin_archive_exceeds_lines($text, $max_lines) {
-    if ($max_lines < 1) {
-        return false;
-    }
-    $lines = 0;
-    foreach (preg_split('/\R/u', trim($text)) as $line) {
-        $length = function_exists('mb_strlen') ? mb_strlen($line) : strlen($line);
-        $lines += max(1, (int) ceil($length / LINKEDIN_ARCHIVE_CHARS_PER_LINE));
-        if ($lines > $max_lines) {
-            return true;
+function linkedin_archive_initials($name) {
+    $letters = '';
+    foreach (preg_split('/\s+/u', trim($name), -1, PREG_SPLIT_NO_EMPTY) as $word) {
+        $letters .= function_exists('mb_substr') ? mb_substr($word, 0, 1) : substr($word, 0, 1);
+        if (strlen($letters) >= 2) {
+            break;
         }
     }
-    return false;
+    return function_exists('mb_strtoupper') ? mb_strtoupper($letters) : strtoupper($letters);
 }
 
 /**
@@ -171,7 +163,6 @@ add_shortcode('linkedin_archive', function ($attributes) {
     $options = shortcode_atts(array(
         'limit'   => 12,
         'columns' => 2,
-        'clamp'   => 10,
         'author'  => '',
         'avatar'  => '',
         'profile' => '',
@@ -179,7 +170,6 @@ add_shortcode('linkedin_archive', function ($attributes) {
 
     $limit   = max(1, min(100, (int) $options['limit']));
     $columns = max(1, min(4, (int) $options['columns']));
-    $clamp   = max(0, min(100, (int) $options['clamp']));
     $author  = linkedin_archive_setting($options['author'], 'LINKEDIN_ARCHIVE_AUTHOR_NAME');
     $avatar  = linkedin_archive_setting($options['avatar'], 'LINKEDIN_ARCHIVE_AUTHOR_IMAGE');
     $profile = linkedin_archive_setting($options['profile'], 'LINKEDIN_ARCHIVE_AUTHOR_URL');
@@ -215,6 +205,7 @@ add_shortcode('linkedin_archive', function ($attributes) {
     .li-archive-card{background:#fff;border:1px solid #e7eaf0;border-radius:12px;box-shadow:0 5px 25px rgba(0,0,0,.055);overflow:hidden;display:flex;flex-direction:column}
     .li-archive-card__header{display:flex;align-items:center;gap:12px;padding:18px 20px 14px}
     .li-archive-card__avatar{width:48px;height:48px;border-radius:50%;object-fit:cover;flex:0 0 auto;background:#e7eaf0}
+    .li-archive-card__avatar--initials{display:flex;align-items:center;justify-content:center;background:#0a66c2;color:#fff;font-weight:600;font-size:1.05rem;letter-spacing:.02em}
     .li-archive-card__identity{min-width:0;line-height:1.35}
     .li-archive-card__author{font-weight:600;color:#1b1f24;text-decoration:none;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .li-archive-card__author:hover{text-decoration:underline}
@@ -230,9 +221,6 @@ add_shortcode('linkedin_archive', function ($attributes) {
     .li-archive-card__text p:last-child{margin-bottom:0}
     .li-archive-card__text a{color:#0a66c2;text-decoration:none}
     .li-archive-card__text a:hover{text-decoration:underline}
-    .li-archive-card__text--clamped{display:-webkit-box;-webkit-line-clamp:var(--li-clamp,10);line-clamp:var(--li-clamp,10);-webkit-box-orient:vertical;overflow:hidden}
-    .li-archive-card__more{display:inline-block;margin-top:8px;font-size:.88rem;color:#0a66c2;text-decoration:none}
-    .li-archive-card__more:hover{text-decoration:underline}
     .li-archive-card__footer{margin-top:auto;display:flex;align-items:center;gap:16px;padding:12px 20px;border-top:1px solid #edf0f4;font-size:.88rem;color:#66707d}
     .li-archive-card__stat{display:inline-flex;align-items:center;gap:5px}
     .li-archive-card__link{margin-left:auto;display:inline-flex;align-items:center;color:#0a66c2;text-decoration:none}
@@ -255,15 +243,15 @@ add_shortcode('linkedin_archive', function ($attributes) {
         } else {
             $body = linkedin_archive_linkify_hashtags(esc_html($post['content_text'] ?? ''));
         }
-
-        $plain = $post['content_text'] ?? wp_strip_all_tags($body);
-        $truncated = linkedin_archive_exceeds_lines($plain, $clamp);
         ?>
         <article class="li-archive-card">
             <header class="li-archive-card__header">
                 <?php if ($avatar) : ?>
                     <img class="li-archive-card__avatar" loading="lazy" src="<?php echo esc_url($avatar); ?>"
                          alt="<?php echo esc_attr($author ?: 'Profilbild'); ?>" width="48" height="48">
+                <?php elseif ($author) : ?>
+                    <span class="li-archive-card__avatar li-archive-card__avatar--initials"
+                          aria-hidden="true"><?php echo esc_html(linkedin_archive_initials($author)); ?></span>
                 <?php endif; ?>
                 <div class="li-archive-card__identity">
                     <?php if ($author) : ?>
@@ -299,14 +287,7 @@ add_shortcode('linkedin_archive', function ($attributes) {
             <?php endif; ?>
 
             <div class="li-archive-card__body">
-                <div class="li-archive-card__text<?php echo $truncated ? ' li-archive-card__text--clamped' : ''; ?>"
-                     <?php echo $truncated ? 'style="--li-clamp:' . esc_attr($clamp) . '"' : ''; ?>><?php
-                    echo $body;
-                ?></div>
-                <?php if ($truncated && $permalink) : ?>
-                    <a class="li-archive-card__more" href="<?php echo esc_url($permalink); ?>"
-                       target="_blank" rel="noopener noreferrer">Ganzen Beitrag auf LinkedIn lesen</a>
-                <?php endif; ?>
+                <div class="li-archive-card__text"><?php echo $body; ?></div>
             </div>
 
             <footer class="li-archive-card__footer">
