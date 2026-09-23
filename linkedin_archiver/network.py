@@ -79,7 +79,12 @@ class ApiError(RuntimeError):
         # 404 means "nothing prepared yet", but it can name the member. DEBUG only.
         self.message = message
         self.endpoint = endpoint
-        self.no_data = 'no data found for this member' in message.lower()
+        # LinkedIn beendet die Snapshot-Paginierung mit einem 404 und dem Text
+        # «No data found for this domain and memberId.» — die Wortstellung
+        # wechselt (mal «for this memberId», mal «for this domain and memberId»),
+        # deshalb nur auf den stabilen Teil prüfen. An den Status gebunden, damit
+        # kein echter Fehler als Datenende durchgeht.
+        self.no_data = status == 404 and 'no data found' in message.lower()
         description = {401: 'Token expired or invalid', 403: 'Token lacks permission',
                        429: 'LinkedIn rate limit reached'}.get(status, 'LinkedIn API request failed')
         super().__init__(f'{description} (HTTP {status})')

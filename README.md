@@ -123,8 +123,10 @@ einen Chat kopierter Token sollte widerrufen und ersetzt werden.
 | `LINKEDIN_ACCESS_TOKEN` | erforderlich | OAuth-Token für die Member-Portability-API |
 | `SYNC_INTERVAL_SECONDS` | 3600 | Pause zwischen abgeschlossenen Durchläufen |
 | `SNAPSHOT_INTERVAL_SECONDS` | 86400 | Intervall für den historischen Abgleich |
-| `POST_REFRESH_DAYS` | 1 | Erfolgreich gelesene Seiten und Zähler erneut besuchen |
-| `RETRY_INTERVAL_SECONDS` | 3600 | Wiederholungsintervall bei Seiten-/Medienfehlern |
+| `POST_REFRESH_DAYS` | 1 | Kürzester Abstand zwischen zwei Seitenbesuchen |
+| `MAX_POST_REFRESH_DAYS` | 30 | Längster Abstand; dazwischen wächst er mit dem Alter des Beitrags |
+| `RETRY_INTERVAL_SECONDS` | 3600 | Erster Wiederholungsabstand nach einem Fehler; verdoppelt sich je Versuch |
+| `MAX_RETRY_INTERVAL_SECONDS` | 86400 | Obergrenze für diesen wachsenden Abstand |
 | `MAX_POSTS_PER_CYCLE` | 20 | Maximale Seitenanreicherungen pro Durchlauf |
 | `PAGE_DELAY_SECONDS` | 5 | Abstand zwischen Beitragsseiten |
 | `REQUEST_TIMEOUT_SECONDS` | 45 | Timeout pro Netzwerk-/Browseroperation |
@@ -180,6 +182,20 @@ Das HTML wird auf Text, Absätze, einfache Hervorhebungen und HTTP(S)-Links redu
 Eventhandler, Skripte, eingebettete Frames und `javascript:`-Links werden entfernt.
 Für erhaltene Zeilenumbrüche später beispielsweise `.post-body { white-space: pre-wrap; }`
 verwenden. Nur `content_html` rendern, nicht `raw_page_fragment` oder API-Rohdaten.
+
+### Wie oft werden Zähler aktualisiert?
+
+Der Abstand richtet sich nach dem Alter des Beitrags: rund ein Zehntel davon,
+begrenzt durch `POST_REFRESH_DAYS` nach unten und `MAX_POST_REFRESH_DAYS` nach
+oben. Ein Beitrag von gestern wird täglich geprüft, einer von vor drei Monaten
+alle neun Tage, ein jahrealter alle 30 Tage. Das entspricht dem tatsächlichen
+Verlauf: Reaktionen und Kommentare kommen fast nur in den ersten Tagen dazu.
+
+Schlägt ein Abruf fehl, verdoppelt sich der Abstand mit jedem weiteren
+Fehlversuch desselben Beitrags (1 h, 2 h, 4 h … bis `MAX_RETRY_INTERVAL_SECONDS`).
+Ein erfolgreicher Abruf setzt den Zähler zurück. Ohne diese Staffelung belegen
+dauerhaft unlesbare Beiträge in jedem Zyklus dieselben Plätze und verdrängen
+die Auffrischung der übrigen.
 
 Die Zähler sind LinkedIn-*Reaktionen* insgesamt, nicht nur die Reaktion „Gefällt
 mir“. Wenn möglich werden die exakten Zahlen aus dem strukturierten Beitrag
@@ -388,8 +404,8 @@ durch eigene Beitragskarten in einem mehrspaltigen Masonry-Layout:
 - Fussleiste mit Reaktions- und Kommentarzahl sowie dem LinkedIn-Logo unten
   rechts, das den Beitrag auf LinkedIn öffnet.
 - Erwähnungen und externe Links bleiben klickbar und öffnen in einem neuen Tab.
-  `#hashtags` werden auf die LinkedIn-Hashtagsuche verlinkt, auch wenn sie im
-  Archiv nur als Text vorliegen.
+  Nackte URLs und `#hashtags` werden auch dann verlinkt, wenn der Beitrag noch
+  nicht angereichert ist und sein Text daher gar keine Links enthält.
 - Der Beitragstext wird immer vollständig angezeigt, nie gekürzt.
 - Die Beiträge werden abwechselnd auf die Spalten verteilt (links, rechts,
   links, …). Jede Karte schliesst direkt an die darüberliegende derselben
@@ -531,6 +547,15 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/python -m pytest -q
 ```
+
+Die Textaufbereitung des WordPress-Plugins wird separat geprüft:
+
+```bash
+docker run --rm -v "$PWD/wordpress:/w:ro" php:8.3-cli php /w/tests.php
+```
+
+`build-plugin.sh` führt diese Prüfungen vor dem Packen aus und bricht bei einem
+Fehlschlag ab, sofern PHP verfügbar ist.
 
 Die MariaDB-Integrationstests laufen nur bei gesetztem `TEST_DB_HOST`,
 `TEST_DB_PORT` und `TEST_DB_PASSWORD`. **Nur eine leere Testdatenbank**

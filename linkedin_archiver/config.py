@@ -30,7 +30,9 @@ class Settings:
     interval: int = 3600
     snapshot_interval: int = 86400
     refresh_days: int = 1
+    max_refresh_days: int = 30
     retry_seconds: int = 3600
+    max_retry_seconds: int = 86400
     max_posts: int = 20
     page_delay: int = 5
     request_timeout: int = 45
@@ -61,7 +63,9 @@ class Settings:
             interval=positive("SYNC_INTERVAL_SECONDS", 3600),
             snapshot_interval=positive("SNAPSHOT_INTERVAL_SECONDS", 86400),
             refresh_days=positive("POST_REFRESH_DAYS", 1),
+            max_refresh_days=positive("MAX_POST_REFRESH_DAYS", 30),
             retry_seconds=positive("RETRY_INTERVAL_SECONDS", 3600),
+            max_retry_seconds=positive("MAX_RETRY_INTERVAL_SECONDS", 86400),
             max_posts=positive("MAX_POSTS_PER_CYCLE", 20),
             page_delay=positive("PAGE_DELAY_SECONDS", 5),
             request_timeout=positive("REQUEST_TIMEOUT_SECONDS", 45),

@@ -98,3 +98,30 @@ def test_changelog_endpoint_is_named_even_when_following_a_next_link():
     with pytest.raises(ApiError) as caught:
         api.get('/rest/memberChangeLogs?start=50&q=memberAndApplication')
     assert caught.value.endpoint == 'changelog'
+
+
+def test_snapshot_end_of_data_is_recognised_from_linkedins_actual_wording():
+    # Wortlaut aus dem Produktivlog vom 23.09.2026:
+    # {"code":"","message":"No data found for this domain and memberId.","status":404}
+    for wording in ('No data found for this domain and memberId.',
+                    'No data found for this memberId',
+                    'no data found'):
+        assert ApiError(404, wording).no_data, wording
+
+
+def test_real_errors_are_never_mistaken_for_end_of_data():
+    for status, wording in ((401, 'Empty oauth2 access token'),
+                            (403, 'Not enough permissions to access resource'),
+                            (500, 'Internal server error'),
+                            (404, 'Resource not found')):
+        assert not ApiError(status, wording).no_data, wording
+    # Auch der richtige Text darf ausserhalb von 404 nicht als Datenende gelten.
+    assert not ApiError(500, 'No data found for this domain and memberId.').no_data
+
+
+def test_pagination_stops_cleanly_instead_of_raising():
+    api = LinkedInAPI('test')
+    api.get = Mock(side_effect=[
+        {'elements': [{'snapshotData': [{'n': 1}]}]},
+        ApiError(404, 'No data found for this domain and memberId.')])
+    assert list(api.snapshots()) == [[{'n': 1}]]

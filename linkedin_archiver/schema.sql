@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS posts (
     deleted_at DATETIME(3) NULL,
     enrichment_status VARCHAR(30) NOT NULL DEFAULT 'pending',
     enrichment_error VARCHAR(255) NULL,
+    enrichment_attempts INT UNSIGNED NOT NULL DEFAULT 0,
     enriched_at DATETIME(3) NULL,
     next_enrichment_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),

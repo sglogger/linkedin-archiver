@@ -63,6 +63,7 @@ class Database:
             'reshare_author_url': 'TEXT NULL',
             'reshare_text': 'LONGTEXT NULL',
             'reshare_html': 'LONGTEXT NULL',
+            'enrichment_attempts': 'INT UNSIGNED NOT NULL DEFAULT 0',
         }.items():
             if name not in existing:
                 self.execute(f'ALTER TABLE posts ADD COLUMN {name} {definition}')
@@ -169,9 +170,11 @@ class Database:
     def media_failure(self, media_id, message):
         self.execute("UPDATE post_media SET download_status='failed',last_error=%s WHERE id=%s", (message[:255], media_id))
 
-    def enrichment_result(self, post_id, status, delay, error=None):
-        self.execute('UPDATE posts SET enrichment_status=%s,enrichment_error=%s,next_enrichment_at=%s WHERE id=%s',
-                     (status, error[:255] if error else None, now() + timedelta(seconds=delay), post_id))
+    def enrichment_result(self, post_id, status, delay, error=None, attempts=0):
+        self.execute('UPDATE posts SET enrichment_status=%s,enrichment_error=%s,'
+                     'enrichment_attempts=%s,next_enrichment_at=%s WHERE id=%s',
+                     (status, error[:255] if error else None, attempts,
+                      now() + timedelta(seconds=delay), post_id))
 
     def export(self, published_only=False, limit=None, offset=0, include_raw=False, post_key=None):
         condition = ' AND publish_enabled=TRUE' if published_only else ''

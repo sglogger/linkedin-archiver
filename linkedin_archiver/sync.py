@@ -28,6 +28,33 @@ class Sync:
     def close(self):
         self.reader.close()
 
+    def retry_delay(self, attempts: int) -> int:
+        """Wachsender Abstand nach Fehlschlägen: 1x, 2x, 4x ... bis zur Obergrenze.
+
+        Ein Beitrag hinter einer Login-Schranke wird eine Stunde später kaum
+        lesbar sein. Mit festem Abstand belegen solche Beiträge in jedem Zyklus
+        dieselben Plätze und verdrängen die Auffrischung der Reaktions- und
+        Kommentarzahlen, die nur einmal täglich fällig ist.
+        """
+        return min(self.settings.max_retry_seconds,
+                   self.settings.retry_seconds * 2 ** max(0, attempts - 1))
+
+    def refresh_delay(self, published_at) -> int:
+        """Junge Beiträge öfter auffrischen als alte.
+
+        Reaktionen und Kommentare kommen fast nur in den ersten Tagen dazu; ein
+        jahrealter Beitrag ändert sich praktisch nie mehr. Der Abstand wächst
+        deshalb mit dem Alter — ein Zehntel davon, nach unten begrenzt durch
+        POST_REFRESH_DAYS, nach oben durch MAX_POST_REFRESH_DAYS. Ohne bekanntes
+        Veröffentlichungsdatum bleibt es beim kürzesten Abstand.
+        """
+        floor = self.settings.refresh_days * 86400
+        ceiling = self.settings.max_refresh_days * 86400
+        if published_at is None:
+            return floor
+        age = (datetime.now(timezone.utc).replace(tzinfo=None) - published_at).total_seconds()
+        return int(min(ceiling, max(floor, age / 10)))
+
     def snapshot(self, force=False):
         last = float(self.db.state('last_snapshot', '0'))
         if not force and time.time() - last < self.settings.snapshot_interval:
@@ -98,17 +125,24 @@ class Sync:
                         failed += 1
                         with self.db.transaction():
                             self.db.media_failure(media['id'], safe_error(exc))
+                # Erfolg setzt den Zähler zurück, damit ein einmaliger Ausfall
+                # den Beitrag nicht dauerhaft nach hinten schiebt.
+                attempts = (post.get('enrichment_attempts') or 0) + 1 if failed else 0
                 with self.db.transaction():
                     self.db.enrichment_result(post['id'], 'partial' if failed else 'complete',
-                        self.settings.retry_seconds if failed else self.settings.refresh_days * 86400,
-                        'Some media could not be downloaded' if failed else None)
+                        self.retry_delay(attempts) if failed
+                        else self.refresh_delay(post.get('published_at')),
+                        'Some media could not be downloaded' if failed else None, attempts)
                 log.info('Post %s: %s links, %s media, %s failed downloads',
                          post['post_key'], len(page.links), len(page.media), failed)
             except Exception as exc:
                 message = safe_error(exc)
+                attempts = (post.get('enrichment_attempts') or 0) + 1
+                delay = self.retry_delay(attempts)
                 with self.db.transaction():
-                    self.db.enrichment_result(post['id'], 'failed', self.settings.retry_seconds, message)
-                log.warning('Post %s: %s', post['post_key'], message)
+                    self.db.enrichment_result(post['id'], 'failed', delay, message, attempts)
+                log.warning('Post %s: %s (Versuch %s, naechster in %s min)',
+                            post['post_key'], message, attempts, delay // 60)
 
     def run(self, force_snapshot=False, stop=None, api_enabled=True):
         if not self.db.lock():

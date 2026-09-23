@@ -1,4 +1,5 @@
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock
 import os
@@ -157,3 +158,89 @@ def replace_share(old, new):
     post['post_key'] = new
     post['source_url'] = post['source_url'].replace(old, new)
     return post
+
+
+def test_retry_backoff_grows_and_is_capped():
+    settings = Settings(token='t', retry_seconds=3600, max_retry_seconds=86400)
+    worker = Sync.__new__(Sync)
+    worker.settings = settings
+    assert [worker.retry_delay(n) for n in (1, 2, 3, 4, 5)] == [3600, 7200, 14400, 28800, 57600]
+    # Gedeckelt, damit ein dauerhaft unlesbarer Beitrag nicht ins Unendliche rutscht.
+    assert worker.retry_delay(6) == 86400 and worker.retry_delay(99) == 86400
+    assert worker.retry_delay(0) == 3600
+
+
+def test_failed_post_backs_off_and_success_resets_the_counter(db, tmp_path):
+    settings = Settings(token='t', db_host=db.conn.host, db_port=db.conn.port,
+        db_password=db.conn.password, media_dir=tmp_path, retry_seconds=3600,
+        max_retry_seconds=86400, refresh_days=1)
+    with db.transaction():
+        db.upsert_post(sample())
+    reader = Mock()
+    reader.read.side_effect = FetchError('Browser could not read the post')
+
+    def attempt_state():
+        row = db.rows('SELECT enrichment_attempts,enrichment_status,next_enrichment_at FROM posts WHERE post_key=%s', (KEY,))[0]
+        return row['enrichment_attempts'], row['enrichment_status'], row['next_enrichment_at']
+
+    waits = []
+    for _ in range(3):
+        db.execute("UPDATE posts SET next_enrichment_at='1970-01-01' WHERE post_key=%s", (KEY,))
+        db.conn.commit()
+        Sync(settings, db, api=Mock(), reader=reader, downloader=Mock()).enrich()
+        attempts, status, due = attempt_state()
+        waits.append(round((due - datetime.now(timezone.utc).replace(tzinfo=None)).total_seconds() / 3600))
+        assert status == 'failed'
+    assert [a for a in waits] == [1, 2, 4], waits
+    assert attempt_state()[0] == 3
+
+    # Ein erfolgreicher Durchlauf setzt den Zähler zurück.
+    reader.read.side_effect = None
+    reader.read.return_value = parse_page(FIXTURE.read_text(), URL, KEY)
+    db.execute("UPDATE posts SET next_enrichment_at='1970-01-01' WHERE post_key=%s", (KEY,))
+    db.conn.commit()
+    Sync(settings, db, api=Mock(), reader=reader, downloader=Mock(
+        download=Mock(return_value={'local_path': 'a/b.jpg', 'sha256': 'x', 'content_type': 'image/jpeg', 'size_bytes': 1}))).enrich()
+    attempts, status, due = attempt_state()
+    assert attempts == 0 and status == 'complete'
+    # Der Beispielbeitrag ist Jahre alt, die Auffrischung greift also den Deckel.
+    wait_days = (due - datetime.now(timezone.utc).replace(tzinfo=None)).total_seconds() / 86400
+    assert 29 < wait_days <= 30, wait_days
+
+
+def test_refresh_interval_grows_with_post_age():
+    settings = Settings(token='t', refresh_days=1, max_refresh_days=30)
+    worker = Sync.__new__(Sync)
+    worker.settings = settings
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    def days(age_days):
+        return worker.refresh_delay(now - timedelta(days=age_days)) / 86400
+
+    # Frische Beiträge behalten den kürzesten Abstand; dort ändern sich die
+    # Reaktionszahlen noch.
+    assert days(0) == 1 and days(7) == 1
+    # Danach wächst er mit dem Alter.
+    assert days(30) == 3 and days(90) == 9
+    # Und ist gedeckelt, damit alte Beiträge die Warteschlange nicht fluten.
+    assert days(365) == 30 and days(2600) == 30
+    # Ohne Veröffentlichungsdatum bleibt es beim kürzesten Abstand.
+    assert worker.refresh_delay(None) == 86400
+
+
+def test_old_post_is_scheduled_far_out_after_a_successful_run(db, tmp_path):
+    settings = Settings(token='t', db_host=db.conn.host, db_port=db.conn.port,
+        db_password=db.conn.password, media_dir=tmp_path, refresh_days=1, max_refresh_days=30)
+    old = sample()
+    old['published_at'] = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=900)
+    with db.transaction():
+        db.upsert_post(old)
+        db.execute("UPDATE posts SET next_enrichment_at='1970-01-01' WHERE post_key=%s", (KEY,))
+    reader = Mock(read=Mock(return_value=parse_page(FIXTURE.read_text(), URL, KEY)))
+    downloader = Mock(download=Mock(return_value={
+        'local_path': 'a/b.jpg', 'sha256': 'x', 'content_type': 'image/jpeg', 'size_bytes': 1}))
+    Sync(settings, db, api=Mock(), reader=reader, downloader=downloader).enrich()
+    row = db.rows('SELECT enrichment_status,next_enrichment_at FROM posts WHERE post_key=%s', (KEY,))[0]
+    wait_days = (row['next_enrichment_at'] - datetime.now(timezone.utc).replace(tzinfo=None)).total_seconds() / 86400
+    assert row['enrichment_status'] == 'complete'
+    assert 29 < wait_days <= 30, wait_days
