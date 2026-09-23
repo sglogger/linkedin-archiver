@@ -89,7 +89,7 @@ services:
       MEDIA_DIR: /data/media
       API_READ_KEY: ${API_READ_KEY:-}
       API_PUBLIC_BASE_URL: ${API_PUBLIC_BASE_URL:-http://localhost:8080}
-      API_ALLOWED_ORIGIN: ${API_ALLOWED_ORIGIN:-https://www.glogger.ch}
+      API_ALLOWED_ORIGIN: ${API_ALLOWED_ORIGIN:-https://www.example.net}
     volumes:
       - archive-data:/data:ro
     ports:

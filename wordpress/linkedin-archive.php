@@ -12,10 +12,10 @@ if (!defined('ABSPATH')) {
 /**
  * Optionale Konstanten in wp-config.php:
  *
- *   define('LINKEDIN_ARCHIVE_API_BASE',     'https://linkedinapi.glogger.ch');
+ *   define('LINKEDIN_ARCHIVE_API_BASE',     'https://<api>.exampl.net');
  *   define('LINKEDIN_ARCHIVE_AUTHOR_NAME',  'Steven Glogger');
- *   define('LINKEDIN_ARCHIVE_AUTHOR_IMAGE', 'https://www.glogger.ch/wp-content/uploads/steven.jpg');
- *   define('LINKEDIN_ARCHIVE_AUTHOR_URL',   'https://www.linkedin.com/in/steven-glogger/');
+ *   define('LINKEDIN_ARCHIVE_AUTHOR_IMAGE', 'https://www.example.net/logo.jpg');
+ *   define('LINKEDIN_ARCHIVE_AUTHOR_URL',   'http://linkedin.com/in/stevenglogger/');
  *
  * Name und Profilbild stehen bewusst hier: Die Archiv-API liefert sie nicht.
  * Sie speichert nur die eigenen Beiträge, keine Profilbilder — alle Beiträge

@@ -100,5 +100,5 @@ unzip -Z1 "$archive" | sed 's/^/  /'
 echo
 echo "Installation: WordPress-Admin → Plugins → Installieren → Plugin hochladen."
 echo "Danach in wp-config.php die API-Basis setzen, zum Beispiel:"
-echo "  define('LINKEDIN_ARCHIVE_API_BASE', 'https://www.glogger.ch/linkedin-api');"
+echo "  define('LINKEDIN_ARCHIVE_API_BASE', 'https://www.example.net/linkedin-api');"
 echo "Anzeigen mit dem Shortcode [linkedin_archive limit=\"12\"]."

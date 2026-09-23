@@ -49,7 +49,7 @@ class Settings:
     log_level: str = "INFO"
     api_read_key: str = field(default="", repr=False)
     api_public_base_url: str = "http://localhost:8080"
-    api_allowed_origin: str = "https://www.glogger.ch"
+    api_allowed_origin: str = "https://www.example.net"
 
     @classmethod
     def from_env(cls):
@@ -83,5 +83,5 @@ class Settings:
             log_level=os.getenv("LOG_LEVEL", "INFO"),
             api_read_key=os.getenv("API_READ_KEY", "").strip(),
             api_public_base_url=os.getenv("API_PUBLIC_BASE_URL", "http://localhost:8080").rstrip('/'),
-            api_allowed_origin=os.getenv("API_ALLOWED_ORIGIN", "https://www.glogger.ch").rstrip('/'),
+            api_allowed_origin=os.getenv("API_ALLOWED_ORIGIN", "https://www.example.net").rstrip('/'),
         )

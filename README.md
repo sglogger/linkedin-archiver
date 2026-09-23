@@ -1,35 +1,35 @@
 # LinkedIn Personal Archive
 
-Docker-Worker für die eigenen LinkedIn-Beiträge: regelmässiger API-Abgleich,
-MariaDB, dauerhaft gespeicherte Bilder sowie erhaltene Personen-, Firmen- und
-sonstige Links. Die Texte werden sowohl als Klartext als auch als bereinigtes
-HTML gespeichert. Eine HTTP-API und ein WordPress-Shortcode machen freigegebene
-Beiträge für eine eigene Website nutzbar. Der Worker veröffentlicht selbst nichts.
+Docker worker for your own LinkedIn posts: regular API sync, MariaDB,
+permanently stored images, and preserved person, company and other links.
+Post text is stored both as plain text and as sanitized HTML. An HTTP API and a
+WordPress shortcode make approved posts usable on your own website. The worker
+itself never publishes anything.
 
-## Was enthalten ist
+## What's included
 
-- Historischer Erstimport über die Member Snapshot API (`MEMBER_SHARE_INFO`).
-- Laufende neue/geänderte/gelöschte eigene Beiträge über die Changelog API.
-- Zusätzlicher täglicher Snapshot-Abgleich; Seitenanreicherung für neue,
-  geänderte, fehlgeschlagene und ältere Beiträge.
-- Direkter Abruf der öffentlichen Beitragsseite; Chromium/Playwright als Fallback.
-- HTML mit echten Links statt erratener Profilzuordnungen. Tracking-Parameter
-  von LinkedIn-Links werden entfernt; Hashtag-Anmeldelinks werden nach Möglichkeit
-  auf das tatsächliche LinkedIn-Hashtagziel zurückgeführt.
-- Bilder, direkt angebotene MP4/WebM-Videos und PDF-Dateien. Datei-Hash,
-  Dateityp, Reihenfolge, Alt-Text, Herkunft und Downloadstatus werden gespeichert.
-- Reaktionen und Kommentarzahlen aus der öffentlichen Beitragsseite, mit
-  Zeitstempel des letzten erfolgreichen Abrufs. Das Veröffentlichungsdatum
-  wird bei manuell abgerufenen Beiträgen aus den strukturierten Seitendaten ergänzt.
-- Lese-API für freigegebene Beiträge und Bilder sowie geschützter Rohdaten-Endpunkt.
-- WordPress-Plugin mit responsiven Beitragskarten und erhaltenen Links.
-- Wiederholbare Imports, Transaktionen, Sperre gegen parallele Worker,
-  Wiederaufnahme nach Neustarts und begrenzte Wiederholungsversuche bei API-Fehlern.
-- CLI für Einzelabruf, JSON-Import, Status und Export.
+- Initial historical import via the Member Snapshot API (`MEMBER_SHARE_INFO`).
+- Ongoing new/changed/deleted own posts via the Changelog API.
+- Additional daily snapshot sync; page enrichment for new, changed, failed and
+  older posts.
+- Direct fetch of the public post page; Chromium/Playwright as fallback.
+- HTML with real links instead of guessed profile matches. Tracking parameters
+  are stripped from LinkedIn links; hashtag sign-in links are resolved to the
+  actual LinkedIn hashtag target where possible.
+- Images, directly offered MP4/WebM videos and PDF files. File hash, file type,
+  order, alt text, origin and download status are stored.
+- Reactions and comment counts from the public post page, with the timestamp
+  of the last successful fetch. For manually fetched posts, the publication
+  date is filled in from the page's structured data.
+- Read API for approved posts and images, plus a protected raw data endpoint.
+- WordPress plugin with responsive post cards and preserved links.
+- Repeatable imports, transactions, a lock against parallel workers, resume
+  after restarts and limited retries on API errors.
+- CLI for single fetch, JSON import, status and export.
 
-## Schnellstart
+## Quick start
 
-Voraussetzung: Docker Engine/Desktop mit Docker Compose v2 oder neuer.
+Requirement: Docker Engine/Desktop with Docker Compose v2 or newer.
 
 ```bash
 cp docker-compose.yml-example docker-compose.yml
@@ -38,21 +38,20 @@ chmod 600 .env
 mkdir -p secrets
 ```
 
-`.env` bearbeiten: einen **neuen** LinkedIn-Access-Token, zwei unterschiedliche
-zufällige Datenbankpasswörter und einen separaten `API_READ_KEY` eintragen.
-Beispielsweise liefert `openssl rand -hex 32`
-ein geeignetes Passwort. Falls bereits eine lokale `.env` mit erzeugten Passwörtern
-vorhanden ist, diese verwenden und nicht überschreiben.
+Edit `.env`: enter a **new** LinkedIn access token, two different random
+database passwords and a separate `API_READ_KEY`. For example,
+`openssl rand -hex 32` produces a suitable password. If a local `.env` with
+generated passwords already exists, use it and do not overwrite it.
 
 ```dotenv
-LINKEDIN_ACCESS_TOKEN=DEIN_OAUTH_ACCESS_TOKEN
-MARIADB_PASSWORD=DEIN_ZUFAELLIGES_DATENBANKPASSWORT
-MARIADB_ROOT_PASSWORD=EIN_ANDERES_ZUFAELLIGES_ROOTPASSWORT
-API_READ_KEY=EIN_DRITTER_ZUFAELLIGER_WERT
+LINKEDIN_ACCESS_TOKEN=YOUR_OAUTH_ACCESS_TOKEN
+MARIADB_PASSWORD=YOUR_RANDOM_DATABASE_PASSWORD
+MARIADB_ROOT_PASSWORD=A_DIFFERENT_RANDOM_ROOT_PASSWORD
+API_READ_KEY=A_THIRD_RANDOM_VALUE
 SYNC_INTERVAL_SECONDS=3600
 ```
 
-Danach:
+Then:
 
 ```bash
 docker compose up -d --build
@@ -61,217 +60,202 @@ docker compose exec archive python -m linkedin_archiver status
 curl http://127.0.0.1:8080/health
 ```
 
-MariaDB ist nur im Compose-Netz erreichbar; es wird kein Datenbankport am Host
-veröffentlicht. Die Website-API lauscht standardmässig nur auf `127.0.0.1:8080`.
-Das Image läuft als `pwuser`, nicht als root. Chromium benötigt
-etwas Arbeitsspeicher; Compose reserviert 512 MB gemeinsamen Speicher.
+MariaDB is only reachable inside the Compose network; no database port is
+published on the host. By default the website API only listens on
+`127.0.0.1:8080`. The image runs as `pwuser`, not as root. Chromium needs some
+memory; Compose reserves 512 MB of shared memory.
 
-Der erste Import kann mehrere Durchläufe benötigen: standardmässig werden pro
-Durchlauf höchstens 20 Beitragsseiten angereichert. Die API-Metadaten werden
-unabhängig davon vollständig eingelesen. Zwischen Seitenaufrufen liegen mindestens
-fünf Sekunden. Ein Zyklus startet sofort und danach jeweils nach der konfigurierten
-Pause; es gibt keine überlappenden Zyklen.
+The first import may take several runs: by default, at most 20 post pages are
+enriched per run. API metadata is read in full regardless. There are at least
+five seconds between page requests. A cycle starts immediately and then after
+each configured pause; cycles never overlap.
 
-## LinkedIn: Wie bekomme ich den API-Zugang?
+## LinkedIn: how do I get API access?
 
-Gemeint ist ein **OAuth Access Token**, nicht die Client-ID oder das Client Secret.
-Für das eigene Profil in der Schweiz bzw. EU/EWR stellt LinkedIn das Produkt
-**Member Data Portability API (Member)** bereit.
+What you need is an **OAuth access token**, not the client ID or client secret.
+For your own profile in Switzerland or the EU/EEA, LinkedIn provides the
+**Member Data Portability API (Member)** product.
 
-1. Mit dem eigenen LinkedIn-Konto das [Developer Portal](https://www.linkedin.com/developers/)
-   öffnen und eine neue App erstellen.
-2. Im Feld „LinkedIn Page“ genau die dafür vorgesehene
-   [Member Data Portability Default Company](https://www.linkedin.com/company/member-data-portability-member-default-company)
-   auswählen. LinkedIn verlangt diese spezielle Seite; keine neue Firma anlegen.
-3. Die weiteren Pflichtfelder des Formulars ausfüllen.
-4. Unter „Products“ **Member Data Portability API (Member)** auswählen und den
-   Zugang über „Request access“ beantragen; die zugehörigen Bedingungen lesen.
-5. Unter „Docs and tools“ die
-   [OAuth Token Tools](https://www.linkedin.com/developers/tools/oauth) öffnen.
-6. „Create token“, die gerade angelegte App und den Scope
-   **`r_dma_portability_self_serve`** auswählen; „Request access token“ ausführen
-   und dem Zugriff auf die eigenen Daten zustimmen.
-7. Den erzeugten Token nur lokal in `LINKEDIN_ACCESS_TOKEN` in `.env` eintragen.
+1. Open the [Developer Portal](https://www.linkedin.com/developers/) with your
+   own LinkedIn account and create a new app.
+2. In the "LinkedIn Page" field, select exactly the designated
+   [Member Data Portability Default Company](https://www.linkedin.com/company/member-data-portability-member-default-company).
+   LinkedIn requires this special page; do not create a new company.
+3. Fill in the remaining required fields of the form.
+4. Under "Products", select **Member Data Portability API (Member)** and apply
+   via "Request access"; read the associated terms.
+5. Under "Docs and tools", open the
+   [OAuth Token Tools](https://www.linkedin.com/developers/tools/oauth).
+6. Choose "Create token", the app you just created and the scope
+   **`r_dma_portability_self_serve`**; run "Request access token" and consent
+   to access to your own data.
+7. Enter the generated token only locally in `LINKEDIN_ACCESS_TOKEN` in `.env`.
 
-Die [offizielle Einrichtungsanleitung](https://learn.microsoft.com/en-us/linkedin/dma/member-data-portability/member-data-portability-member/)
-beschreibt diese Schritte. LinkedIn bestimmt die regionale Berechtigung anhand
-des Profilstandorts. Der Zugang ist für die eigenen Mitgliedsdaten gedacht.
+The [official setup guide](https://learn.microsoft.com/en-us/linkedin/dma/member-data-portability/member-data-portability-member/)
+describes these steps. LinkedIn determines regional eligibility from the
+profile location. Access is intended for your own member data.
 
-### Tokenablauf und Austausch
+### Token expiry and replacement
 
-Tokens können ablaufen oder widerrufen werden. Bei HTTP 401/403 zeigt der Worker
-einen Fehler; bereits gespeicherte Daten bleiben erhalten. Über das Token-Tool
-einen neuen Token erstellen, `.env` aktualisieren und den Container **neu erstellen**:
+Tokens can expire or be revoked. On HTTP 401/403 the worker reports an error;
+already stored data is kept. Create a new token via the token tool, update
+`.env` and **recreate** the container:
 
 ```bash
 docker compose up -d --force-recreate archive
 ```
 
-`docker compose restart` übernimmt geänderte Umgebungsvariablen nicht. Eine
-automatische Token-Erneuerung wird nicht vorausgesetzt; der Member-Zugang
-liefert nicht notwendigerweise einen Refresh Token. Client Secrets werden
-für diesen manuellen Token-Workflow nicht benötigt.
+`docker compose restart` does not pick up changed environment variables.
+Automatic token renewal is not assumed; member access does not necessarily
+provide a refresh token. Client secrets are not needed for this manual token
+workflow.
 
-`.env`, Cookies und Daten sind von Git und Docker-Builds ausgeschlossen. Tokens
-werden nicht in die Datenbank oder in Exportdateien geschrieben. Ein zuvor in
-einen Chat kopierter Token sollte widerrufen und ersetzt werden.
+`.env`, cookies and data are excluded from Git and Docker builds. Tokens are
+never written to the database or export files. A token that was previously
+pasted into a chat should be revoked and replaced.
 
-## Konfiguration in .env
+## Configuration in .env
 
-| Variable | Standard | Bedeutung |
+| Variable | Default | Meaning |
 |---|---:|---|
-| `LINKEDIN_ACCESS_TOKEN` | erforderlich | OAuth-Token für die Member-Portability-API |
-| `SYNC_INTERVAL_SECONDS` | 3600 | Pause zwischen abgeschlossenen Durchläufen |
-| `SNAPSHOT_INTERVAL_SECONDS` | 86400 | Intervall für den historischen Abgleich |
-| `POST_REFRESH_DAYS` | 1 | Kürzester Abstand zwischen zwei Seitenbesuchen |
-| `MAX_POST_REFRESH_DAYS` | 30 | Längster Abstand; dazwischen wächst er mit dem Alter des Beitrags |
-| `RETRY_INTERVAL_SECONDS` | 3600 | Erster Wiederholungsabstand nach einem Fehler; verdoppelt sich je Versuch |
-| `MAX_RETRY_INTERVAL_SECONDS` | 86400 | Obergrenze für diesen wachsenden Abstand |
-| `MAX_POSTS_PER_CYCLE` | 20 | Maximale Seitenanreicherungen pro Durchlauf |
-| `PAGE_DELAY_SECONDS` | 5 | Abstand zwischen Beitragsseiten |
-| `REQUEST_TIMEOUT_SECONDS` | 45 | Timeout pro Netzwerk-/Browseroperation |
-| `MAX_API_PAGES` | 10000 | Schutz vor endloser API-Paginierung |
-| `PAGE_ENRICHMENT_ENABLED` | true | Seiten für Links und Medien lesen |
-| `BROWSER_FALLBACK_ENABLED` | true | Chromium versuchen, wenn HTTP nicht reicht |
-| `BROWSER_STORAGE_STATE` | leer | Optional `/run/secrets/linkedin-state.json` |
-| `AUTO_PUBLISH` | false | Neu eingelesene Beiträge sofort freigeben, statt einzeln mit `publish` |
-| `DOWNLOAD_MEDIA` | true | Erreichbare Mediendateien dauerhaft herunterladen |
-| `MAX_MEDIA_SIZE_MB` | 100 | Obergrenze pro Datei |
-| `MEDIA_ALLOWED_HOSTS` | licdn.com,linkedin.com | Erlaubte Medienhosts, inklusive Subdomains |
-| `LOG_LEVEL` | INFO | Python-Loglevel |
-| `DB_HOST` / `DB_PORT` | db / 3306 | MariaDB-Verbindung |
-| `MARIADB_DATABASE` / `MARIADB_USER` | linkedin_archive / linkedin | Datenbank und Benutzer |
-| `MARIADB_PASSWORD` | erforderlich | Passwort des Anwendungsbenutzers |
-| `MARIADB_ROOT_PASSWORD` | erforderlich | Passwort zur Initialisierung der Compose-DB |
-| `API_READ_KEY` | erforderlich für Rohdaten | Geheimnis für `X-Archive-Key`; nicht im Browser verwenden |
-| `API_BIND_ADDRESS` / `API_PORT` | 127.0.0.1 / 8080 | Bind-Adresse und Host-Port der Website-API |
-| `API_PUBLIC_BASE_URL` | http://localhost:8080 | Öffentliche Basis-URL, aus der Bild-URLs gebildet werden |
-| `API_ALLOWED_ORIGIN` | https://www.glogger.ch | Erlaubter Browser-Origin für CORS |
+| `LINKEDIN_ACCESS_TOKEN` | required | OAuth token for the Member Portability API |
+| `SYNC_INTERVAL_SECONDS` | 3600 | Pause between completed runs |
+| `SNAPSHOT_INTERVAL_SECONDS` | 86400 | Interval for the historical sync |
+| `POST_REFRESH_DAYS` | 1 | Shortest interval between two page visits |
+| `MAX_POST_REFRESH_DAYS` | 30 | Longest interval; in between it grows with the post's age |
+| `RETRY_INTERVAL_SECONDS` | 3600 | First retry interval after an error; doubles with each attempt |
+| `MAX_RETRY_INTERVAL_SECONDS` | 86400 | Upper bound for this growing interval |
+| `MAX_POSTS_PER_CYCLE` | 20 | Maximum page enrichments per run |
+| `PAGE_DELAY_SECONDS` | 5 | Delay between post pages |
+| `REQUEST_TIMEOUT_SECONDS` | 45 | Timeout per network/browser operation |
+| `MAX_API_PAGES` | 10000 | Guard against endless API pagination |
+| `PAGE_ENRICHMENT_ENABLED` | true | Read pages for links and media |
+| `BROWSER_FALLBACK_ENABLED` | true | Try Chromium when HTTP is not enough |
+| `BROWSER_STORAGE_STATE` | empty | Optional `/run/secrets/linkedin-state.json` |
+| `AUTO_PUBLISH` | false | Approve newly imported posts immediately instead of individually with `publish` |
+| `DOWNLOAD_MEDIA` | true | Permanently download reachable media files |
+| `MAX_MEDIA_SIZE_MB` | 100 | Size limit per file |
+| `MEDIA_ALLOWED_HOSTS` | licdn.com,linkedin.com | Allowed media hosts, including subdomains |
+| `LOG_LEVEL` | INFO | Python log level |
+| `DB_HOST` / `DB_PORT` | db / 3306 | MariaDB connection |
+| `MARIADB_DATABASE` / `MARIADB_USER` | linkedin_archive / linkedin | Database and user |
+| `MARIADB_PASSWORD` | required | Password of the application user |
+| `MARIADB_ROOT_PASSWORD` | required | Password for initializing the Compose DB |
+| `API_READ_KEY` | required for raw data | Secret for `X-Archive-Key`; do not use in the browser |
+| `API_BIND_ADDRESS` / `API_PORT` | 127.0.0.1 / 8080 | Bind address and host port of the website API |
+| `API_PUBLIC_BASE_URL` | http://localhost:8080 | Public base URL from which image URLs are built |
+| `API_ALLOWED_ORIGIN` | https://www.example.net | Allowed browser origin for CORS |
 
-Um beispielsweise externe Vorschau-Bilder von Credly oder ein verlinktes PDF
-herunterzuladen, kann der jeweilige Host zur Liste hinzugefügt werden, etwa
-`images.credly.com`. Die Liste steuert beides: Medien von nicht aufgeführten
-Hosts werden gar nicht erst als Anhang erfasst, statt bei jedem Durchlauf
-erneut am Download zu scheitern. Als Link im Beitragstext bleiben sie erhalten. OAuth-Header werden
-ausschliesslich an `api.linkedin.com` gesendet, nie an Medienhosts.
+For example, to download external preview images from Credly or a linked PDF,
+add the respective host to the list, such as `images.credly.com`. The list
+controls both: media from unlisted hosts is not recorded as an attachment at
+all, rather than failing to download again on every run. They are still kept
+as links in the post text. OAuth headers are sent exclusively to
+`api.linkedin.com`, never to media hosts.
 
-## Wie bleiben Personen- und Firmenlinks erhalten?
+## How are person and company links preserved?
 
-Der reine Snapshot liefert häufig nur Text. Die öffentliche Beitragsseite
-enthält dagegen echte `<a href="…">Name</a>`-Elemente. Gespeichert werden:
+The snapshot alone often provides only text. The public post page, however,
+contains real `<a href="…">Name</a>` elements. The following is stored:
 
-- `posts.content_html`: bereinigter Beitrag mit diesen Links und Absätzen.
-- `posts.content_text`: Klartext für Suche und Vorschauen.
-- `post_links`: Ziel, Beschriftung, Reihenfolge und Typ (`person`, `organization`,
+- `posts.content_html`: sanitized post with these links and paragraphs.
+- `posts.content_text`: plain text for search and previews.
+- `post_links`: target, label, order and type (`person`, `organization`,
   `hashtag`, `external`).
 
-Im geprüften Beispiel
-[6978966287410470912](https://www.linkedin.com/feed/update/urn%3Ali%3Ashare%3A6978966287410470912)
-sind Dan Rodriguez, Sven Decrauzat, Oliver Stein, Mike Feusi und Florian Kässberger
-als Links vorhanden. Andere dort genannte Namen stehen öffentlich nur als Text;
-ihre Profil-URLs werden nicht erfunden. Firmenlinks wie Digitec Galaxus bleiben
-auf dieselbe Weise erhalten. Links aus Kommentaren und Profilbilder werden
-nicht als Teil des eigenen Beitrags übernommen.
-Im weiteren Beispiel
-[6947191367093653525](https://www.linkedin.com/feed/update/urn%3Ali%3Ashare%3A6947191367093653525)
-bleiben die Links auf Swisscom, TSK Zürich, Stefan Rüegg, Marco Lüthi und
-Christoph Aeschlimann erhalten. Die öffentliche Seite zeigte beim Test 60
-Reaktionen und 3 Kommentare; die Werte können sich später ändern.
+The HTML is reduced to text, paragraphs, simple emphasis and HTTP(S) links.
+Event handlers, scripts, embedded frames and `javascript:` links are removed.
+To preserve line breaks later, use for example `.post-body { white-space: pre-wrap; }`.
+Only render `content_html`, not `raw_page_fragment` or raw API data.
 
-Das HTML wird auf Text, Absätze, einfache Hervorhebungen und HTTP(S)-Links reduziert.
-Eventhandler, Skripte, eingebettete Frames und `javascript:`-Links werden entfernt.
-Für erhaltene Zeilenumbrüche später beispielsweise `.post-body { white-space: pre-wrap; }`
-verwenden. Nur `content_html` rendern, nicht `raw_page_fragment` oder API-Rohdaten.
+### How often are counters updated?
 
-### Wie oft werden Zähler aktualisiert?
+The interval depends on the post's age: roughly a tenth of it, bounded below by
+`POST_REFRESH_DAYS` and above by `MAX_POST_REFRESH_DAYS`. A post from yesterday
+is checked daily, one from three months ago every nine days, a post that is
+years old every 30 days. This matches the actual pattern: reactions and
+comments arrive almost exclusively in the first few days.
 
-Der Abstand richtet sich nach dem Alter des Beitrags: rund ein Zehntel davon,
-begrenzt durch `POST_REFRESH_DAYS` nach unten und `MAX_POST_REFRESH_DAYS` nach
-oben. Ein Beitrag von gestern wird täglich geprüft, einer von vor drei Monaten
-alle neun Tage, ein jahrealter alle 30 Tage. Das entspricht dem tatsächlichen
-Verlauf: Reaktionen und Kommentare kommen fast nur in den ersten Tagen dazu.
+If a fetch fails, the interval doubles with each further failed attempt for the
+same post (1 h, 2 h, 4 h … up to `MAX_RETRY_INTERVAL_SECONDS`). A successful
+fetch resets the counter. Without this backoff, permanently unreadable posts
+would occupy the same slots in every cycle and crowd out refreshing the rest.
 
-Schlägt ein Abruf fehl, verdoppelt sich der Abstand mit jedem weiteren
-Fehlversuch desselben Beitrags (1 h, 2 h, 4 h … bis `MAX_RETRY_INTERVAL_SECONDS`).
-Ein erfolgreicher Abruf setzt den Zähler zurück. Ohne diese Staffelung belegen
-dauerhaft unlesbare Beiträge in jedem Zyklus dieselben Plätze und verdrängen
-die Auffrischung der übrigen.
+The counters are total LinkedIn *reactions*, not just "Like" reactions. Where
+possible, exact numbers are read from the structured post data. If a counter
+is also missing from the public HTML, its database field stays `NULL`; the API
+does not invent a zero. `engagement_updated_at` shows the last detected state.
+With `POST_REFRESH_DAYS=1`, successfully read posts are queued again after one
+day; processing happens up to `MAX_POSTS_PER_CYCLE` per cycle.
 
-Die Zähler sind LinkedIn-*Reaktionen* insgesamt, nicht nur die Reaktion „Gefällt
-mir“. Wenn möglich werden die exakten Zahlen aus dem strukturierten Beitrag
-gelesen. Fehlt ein Zähler auch im öffentlichen HTML, bleibt sein Datenbankfeld `NULL`;
-die API erfindet keine Null. `engagement_updated_at` zeigt den letzten erkannten
-Stand. Mit `POST_REFRESH_DAYS=1` werden erfolgreich gelesene Beiträge nach einem
-Tag erneut vorgemerkt; Abarbeitung erfolgt bis `MAX_POSTS_PER_CYCLE` pro Zyklus.
+## Media and limitations
 
-## Medien und Grenzen
+In the account data examined here, `MediaUrl` or `Media Link` was often empty.
+The worker therefore uses the actual media attributes of the post page. Images
+are loaded from the post's image container, including `data-delayed-url` and
+`srcset`, instead of collecting all images on a page.
 
-Bei den hier geprüften Kontodaten war `MediaUrl` bzw. `Media Link` oft leer.
-Der Worker nutzt deshalb die tatsächlichen Medienattribute der Beitragsseite.
-Bilder werden aus dem Beitrags-Bildcontainer geladen, einschliesslich
-`data-delayed-url` und `srcset`, statt alle Bilder einer Seite zu sammeln.
+Files are stored under `/data/media/<hash prefix>/<SHA256>.<extension>`;
+identical bytes are stored only once. The SQL mapping contains the original
+URL, position and download status. Signed CDN URLs may expire; a successfully
+stored local file remains available regardless.
 
-Dateien liegen unter `/data/media/<Hash-Präfix>/<SHA256>.<Endung>`; gleiche Bytes
-werden nur einmal gespeichert. Die SQL-Zuordnung enthält die ursprüngliche URL,
-die Position und den Downloadstatus. Signierte CDN-URLs können ablaufen; eine
-erfolgreich gespeicherte lokale Datei bleibt unabhängig davon verfügbar.
+**No guarantee of original resolution:** the largest directly offered image
+variant is saved. For example, the public page of the cat litter box post
+delivered 800 × 600 pixels. Signatures and size parameters are not tampered
+with. Already stored files are not downloaded again on repeat runs, unless the
+local file is missing or the asset ID changes.
 
-**Keine Garantie für Originalauflösung:** Gesichert wird die grösste unmittelbar
-angebotene Bildvariante. Beispielsweise lieferte die öffentliche Seite des
-Katzenklo-Beitrags 800 × 600 Pixel. Signaturen und Grössenparameter werden nicht
-manipuliert. Bereits gespeicherte Dateien werden bei Wiederholung nicht erneut
-geladen, ausser die lokale Datei fehlt oder sich die Asset-ID ändert.
+Videos/PDFs are only downloaded if the page exposes direct, supported file
+URLs. HLS/DASH, hidden carousel pages, internal document viewers, external
+embeds and protected original files are not fully supported media archives.
+`complete` means the **detected** media was processed; it does not prove that
+LinkedIn delivers all attachments. Native long-form LinkedIn articles/newsletters
+(`/pulse/`) are not imported as complete articles in this version; the focus is
+on feed posts.
 
-Videos/PDFs werden nur heruntergeladen, wenn die Seite direkte unterstützte
-Datei-URLs offenlegt. HLS/DASH, nicht sichtbare Karussellseiten, interne
-Dokument-Viewer, externe Embeds und geschützte Originaldateien sind keine
-vollständig unterstützten Medienarchive. `complete` bedeutet, dass die **erkannten**
-Medien verarbeitet wurden; es beweist nicht, dass LinkedIn alle Anhänge ausliefert.
-Native lange LinkedIn-Artikel/Newsletter (`/pulse/`) werden in dieser Version
-nicht als vollständige Artikel importiert; Schwerpunkt sind Feed-Beiträge.
+Posts without their own text — such as a shared article or a certificate —
+have no commentary field on the page. They are archived anyway: the article's
+title and target go into `post_links`, the preview image into `post_media`
+with the role `preview`, and `content_text` stays empty rather than being made
+up. LinkedIn's click redirect `/redir/redirect?url=…` is resolved to the
+actual target address.
 
-Beiträge ohne eigenen Text — etwa ein geteilter Artikel oder ein Zertifikat —
-haben auf der Seite kein Kommentarfeld. Sie werden trotzdem archiviert: Titel
-und Ziel des Artikels landen in `post_links`, das Vorschaubild in `post_media`
-mit der Rolle `preview`, und `content_text` bleibt leer statt erfunden zu werden.
-LinkedIns Klick-Umleitung `/redir/redirect?url=…` wird dabei auf die tatsächliche
-Zieladresse zurückgeführt.
+LinkedIn may restrict public pages or change their HTML. In that case the API
+texts are kept, and the error is visible via `status`. A missing snapshot or a
+login page is not treated as a deletion. Only a matching own DELETE event marks
+a post as deleted; its archive remains, but it disappears from exports.
 
-LinkedIn kann öffentliche Seiten einschränken oder deren HTML ändern. Dann
-bleiben die API-Texte erhalten, und der Fehler ist über `status` sichtbar.
-Ein fehlender Snapshot oder eine Login-Seite wird nicht als Löschung behandelt.
-Nur ein passendes eigenes DELETE-Ereignis markiert einen Beitrag als gelöscht;
-sein Archiv bleibt bestehen, er verschwindet aus Exporten.
+Page fetching falls under LinkedIn's rules for automated access.
+[LinkedIn prohibits scraping tools](https://www.linkedin.com/help/lms/answer/a1341387).
+With `PAGE_ENRICHMENT_ENABLED=false`, operation can be limited to the official
+API; if the API media fields are empty, images and mention links will then be
+missing.
 
-Der Seitenabruf fällt unter LinkedIns Regeln für automatisierten Zugriff.
-[LinkedIn untersagt Scraping-Werkzeuge](https://www.linkedin.com/help/lms/answer/a1341387).
-Mit `PAGE_ENRICHMENT_ENABLED=false` lässt sich der Betrieb auf die offizielle API
-begrenzen; bei leeren API-Medienfeldern fehlen dann Bilder und Erwähnungslinks.
+## API pagination and ongoing sync
 
-## API-Paginierung und laufender Abgleich
+The [Snapshot API](https://learn.microsoft.com/en-us/linkedin/dma/member-data-portability/shared/member-snapshot-api)
+requires the header `Linkedin-Version: 202312`. The value is fixed on purpose.
+Its `start` parameter is a page index; the reported total is not always
+complete. The worker keeps reading until an empty response or "No data found
+for this memberId" and treats repeated pages as an error.
 
-Die [Snapshot API](https://learn.microsoft.com/en-us/linkedin/dma/member-data-portability/shared/member-snapshot-api)
-verlangt den Header `Linkedin-Version: 202312`. Der Wert ist absichtlich fest.
-Ihr `start`-Parameter ist ein Seitenindex; die angegebene Gesamtzahl ist nicht
-immer vollständig. Der Worker liest weiter bis zur Leerantwort bzw. „No data
-found for this memberId“ und erkennt wiederholte Seiten als Fehler.
+The [Changelog API](https://learn.microsoft.com/en-us/linkedin/dma/member-data-portability/shared/member-changelog-api)
+delivers events from the time of consent with a 28-day lookback window. The
+worker uses `processedAt` as an inclusive checkpoint, deduplicates events and
+only writes the checkpoint after all result pages have been processed
+successfully. Comments, likes and events by other authors are not stored as
+own posts. Outages longer than 28 days may lead to changes/deletion events that
+cannot be reconstructed.
 
-Die [Changelog API](https://learn.microsoft.com/en-us/linkedin/dma/member-data-portability/shared/member-changelog-api)
-liefert Ereignisse ab der Einwilligung mit einem rückblickenden Fenster von
-28 Tagen. Der Worker verwendet `processedAt` als inklusiven Checkpoint,
-dedupliziert Ereignisse und schreibt den Checkpoint erst nach erfolgreichem
-Verarbeiten aller Ergebnisseiten. Kommentare, Likes und Ereignisse anderer
-Autoren werden nicht als eigene Beiträge gespeichert. Ausfälle über 28 Tage
-können zu nicht rekonstruierbaren Änderungen/Löschereignissen führen.
+The initial snapshot may still be empty right after consent. New or edited
+posts may become available at LinkedIn with a delay. Polling intervals are
+therefore no guarantee of up-to-the-second freshness.
 
-Der Erst-Snapshot kann nach der Einwilligung noch leer sein. Neue oder bearbeitete
-Beiträge können verzögert bei LinkedIn bereitstehen. Abrufintervalle sind daher
-keine Garantie für sekundengenaue Aktualität.
+## Commands
 
-## Befehle
-
-Einzelner API-Durchlauf bzw. erzwungener Snapshot (bei Bedarf laufenden Worker
-vorher stoppen; eine Datenbanksperre verhindert parallele Verarbeitung):
+Single API run or forced snapshot (stop the running worker first if needed; a
+database lock prevents parallel processing):
 
 ```bash
 docker compose run --rm archive sync
@@ -279,14 +263,14 @@ docker compose run --rm archive sync --force-snapshot
 docker compose run --rm archive enrich
 ```
 
-Einen bestimmten eigenen Beitrag direkt lesen, auch ohne API-Token:
+Read a specific own post directly, even without an API token:
 
 ```bash
 docker compose run --rm archive fetch \
   'https://www.linkedin.com/feed/update/urn%3Ali%3Ashare%3A6978966287410470912'
 ```
 
-Bestehende API-JSON-Antwort importieren (nur JSON, kein Terminaltranskript):
+Import an existing API JSON response (JSON only, no terminal transcript):
 
 ```bash
 docker compose run --rm \
@@ -295,9 +279,9 @@ docker compose run --rm \
 docker compose run --rm archive enrich
 ```
 
-## Daten für eine eigene Website
+## Data for your own website
 
-Ein privater Gesamtexport enthält alle nicht als gelöscht markierten Beiträge:
+A private full export contains all posts not marked as deleted:
 
 ```bash
 docker compose exec archive python -m linkedin_archiver export
@@ -305,9 +289,9 @@ docker compose cp archive:/data/export/archive.json ./archive.json
 docker compose cp archive:/data/media ./media
 ```
 
-Vor einer Veröffentlichung Beiträge auswählen. `MEMBER_NETWORK` ist keine
-verlässliche Freigabe für eine öffentliche Website. Deshalb gibt es zusätzlich
-eine eigene, standardmässig deaktivierte `publish_enabled`-Markierung:
+Select posts before publishing. `MEMBER_NETWORK` is not a reliable approval for
+a public website. That is why there is an additional, separate
+`publish_enabled` flag that is disabled by default:
 
 ```bash
 docker compose exec archive python -m linkedin_archiver publish 'urn:li:share:6978966287410470912'
@@ -315,28 +299,28 @@ docker compose exec archive python -m linkedin_archiver export --published-only
 docker compose cp archive:/data/export/website.json ./website.json
 ```
 
-`publish` ändert nur die Auswahl in der eigenen Datenbank. Es veröffentlicht
-nichts auf LinkedIn oder einer Website. Mit `publish <URN> --disable` rückgängig machen.
+`publish` only changes the selection in your own database. It publishes nothing
+on LinkedIn or on a website. Undo with `publish <URN> --disable`.
 
-### Alle neuen Beiträge automatisch freigeben
+### Automatically approve all new posts
 
-Wer die Einzelauswahl nicht will, setzt `AUTO_PUBLISH=true` in `.env` und
-erstellt den Container neu. Jeder danach **neu** eingelesene Beitrag ist sofort
-über die Website-Endpunkte und `export --published-only` verfügbar.
+If you don't want to select posts individually, set `AUTO_PUBLISH=true` in
+`.env` and recreate the container. Every post imported **afterwards** is
+immediately available via the website endpoints and `export --published-only`.
 
-Damit entfällt die Kontrolle pro Beitrag: Auch Beiträge mit Sichtbarkeit
-`MEMBER_NETWORK`, die auf LinkedIn nur das eigene Netzwerk sieht, landen dann
-automatisch auf der öffentlichen Website.
+This removes per-post control: posts with `MEMBER_NETWORK` visibility, which
+on LinkedIn only your own network can see, will then also end up on the public
+website automatically.
 
-Die Einstellung wirkt nur beim erstmaligen Anlegen eines Beitrags:
+The setting only applies when a post is first created:
 
-- Bereits archivierte Beiträge bleiben unverändert und brauchen weiterhin `publish`.
-- Ein mit `publish <URN> --disable` zurückgezogener Beitrag wird durch einen
-  späteren Snapshot- oder Changelog-Abgleich nicht wieder freigegeben.
-- Gelöschte Beiträge werden nie freigegeben.
+- Already archived posts remain unchanged and still need `publish`.
+- A post withdrawn with `publish <URN> --disable` is not re-approved by a later
+  snapshot or changelog sync.
+- Deleted posts are never approved.
 
-Den vorhandenen Bestand gibt `AUTO_PUBLISH` nicht nachträglich frei. Falls das
-gewünscht ist, einmalig in MariaDB:
+`AUTO_PUBLISH` does not retroactively approve existing posts. If you want that,
+run this once in MariaDB:
 
 ```bash
 docker compose exec -T db sh -c \
@@ -345,12 +329,12 @@ UPDATE posts SET publish_enabled = TRUE WHERE deleted_at IS NULL;
 SQL
 ```
 
-Jeder JSON-Beitrag enthält `post_key`, URLs, Zeitpunkt, Sichtbarkeit, `content_html`,
-`content_text`, `links` und `media`. Medien haben `local_url` wie
-`/media/ab/abcdef….jpg`. Die Website kann das Medienverzeichnis unter `/media/`
-ausliefern oder die Dateien in ihren eigenen Object Storage kopieren.
+Each JSON post contains `post_key`, URLs, timestamp, visibility, `content_html`,
+`content_text`, `links` and `media`. Media entries have a `local_url` such as
+`/media/ab/abcdef….jpg`. The website can serve the media directory under
+`/media/` or copy the files to its own object storage.
 
-Alternativ direkt aus MariaDB lesen:
+Alternatively, read directly from MariaDB:
 
 ```sql
 SELECT post_key, published_at, content_text, content_html
@@ -359,117 +343,116 @@ WHERE publish_enabled = TRUE AND deleted_at IS NULL
 ORDER BY published_at DESC;
 ```
 
-Für eine direkte MariaDB-Anbindung der Website einen separaten Benutzer mit
-nur SELECT-Rechten einrichten.
-Keine OAuth-Tokens, Browser-Cookies oder Rohdaten im Frontend ausliefern. Die
-Rohdaten sind für spätere erneute Verarbeitung gedacht, nicht als fertiges HTML.
+For a direct MariaDB connection from the website, set up a separate user with
+SELECT privileges only.
+Never deliver OAuth tokens, browser cookies or raw data to the frontend. The
+raw data is meant for later reprocessing, not as ready-made HTML.
 
-## HTTP-API für die Website
+## HTTP API for the website
 
-Der Compose-Dienst `api` liest nur Daten. Er zeigt standardmässig **keine**
-Beiträge: Erst `publish <URN>` gibt einen Beitrag für Website-Endpunkte und
-Mediendateien frei — oder `AUTO_PUBLISH=true` für alle neu eingelesenen. Gelöschte Beiträge erscheinen dort nicht. Die API ist
-zunächst nur auf dem Docker-Host unter `http://127.0.0.1:8080` erreichbar.
+The Compose service `api` only reads data. By default it shows **no** posts:
+only `publish <URN>` approves a post for the website endpoints and media files
+— or `AUTO_PUBLISH=true` for all newly imported ones. Deleted posts do not
+appear there. Initially the API is only reachable on the Docker host at
+`http://127.0.0.1:8080`.
 
-| Endpunkt | Ergebnis |
+| Endpoint | Result |
 |---|---|
-| `GET /health` | Datenbankverbindung prüfen |
-| `GET /api/v1/posts?limit=12&offset=0` | Freigegebene Beiträge, paginiert, fertig für die Anzeige |
-| `GET /api/v1/posts/urn%3Ali%3Ashare%3A6978966287410470912` | Ein freigegebener Beitrag |
-| `GET /media/<Pfad>` | Lokal gespeicherte Datei eines freigegebenen Beitrags |
-| `GET /api/v1/raw/posts?limit=20&offset=0` | Vollständige Rohfelder aller nicht gelöschten Beiträge; `X-Archive-Key` erforderlich |
+| `GET /health` | Check the database connection |
+| `GET /api/v1/posts?limit=12&offset=0` | Approved posts, paginated, ready for display |
+| `GET /api/v1/posts/urn%3Ali%3Ashare%3A6978966287410470912` | A single approved post |
+| `GET /media/<path>` | Locally stored file of an approved post |
+| `GET /api/v1/raw/posts?limit=20&offset=0` | Full raw fields of all non-deleted posts; `X-Archive-Key` required |
 
-Beispiele:
+Examples:
 
 ```bash
 curl 'http://127.0.0.1:8080/api/v1/posts?limit=12&offset=0'
-curl -H 'X-Archive-Key: DEIN_API_READ_KEY' \
+curl -H 'X-Archive-Key: YOUR_API_READ_KEY' \
   'http://127.0.0.1:8080/api/v1/raw/posts?limit=20&offset=0'
 ```
 
-`limit` ist 1–100, `offset` 0–1000000. Die Antwort enthält `total`, `limit`,
-`offset` und `posts`. Formatierte Beiträge haben unter anderem `content_html`,
-`content_text`, `links`, `media`, `reaction_count`, `comment_count` und
-`engagement_updated_at`. `media[].media_url` ist eine absolute URL zur lokalen
-Datei, sofern der Download gelang. Der private Rohdaten-Endpunkt liefert
-zusätzlich `raw_snapshot`, `raw_event`, `raw_page_fragment` und technische
-Medienfelder. Den Rohdaten-Schlüssel nur serverseitig verwenden, nie in
-WordPress-HTML oder JavaScript. Fehlt `API_READ_KEY` oder ist er noch ein
-`REPLACE_`-Platzhalter, antwortet der Rohdaten-Endpunkt mit 503.
+`limit` is 1–100, `offset` 0–1000000. The response contains `total`, `limit`,
+`offset` and `posts`. Formatted posts include, among others, `content_html`,
+`content_text`, `links`, `media`, `reaction_count`, `comment_count` and
+`engagement_updated_at`. `media[].media_url` is an absolute URL to the local
+file if the download succeeded. The private raw data endpoint additionally
+returns `raw_snapshot`, `raw_event`, `raw_page_fragment` and technical media
+fields. Only use the raw data key server-side, never in WordPress HTML or
+JavaScript. If `API_READ_KEY` is missing or still a `REPLACE_` placeholder,
+the raw data endpoint responds with 503.
 
-### Einbindung auf glogger.ch (WordPress)
+### Integration in WordPress Page
 
-Die derzeitige Seite [glogger.ch/linkedin/](https://www.glogger.ch/linkedin/)
-ist eine WordPress-Seite mit einem Juicer-Embed. Das mitgelieferte Plugin
-[`wordpress/linkedin-archive.php`](wordpress/linkedin-archive.php) ersetzt es
-durch eigene Beitragskarten in einem mehrspaltigen Masonry-Layout:
+The current page [glogger.ch/linkedin/](https://www.glogger.ch/linkedin/) is now using the
+bundled plugin [`wordpress/linkedin-archive.php`](wordpress/linkedin-archive.php) uses it
+with its own post cards in a multi-column masonry layout:
 
-- Kopfzeile mit Profilbild und Name links, kompakter Zeitangabe rechts
-  (`25d`, `3mo`, wie auf LinkedIn). Das ausgeschriebene Datum steht im
-  Tooltip.
-- Darunter die Bilder, dann der Beitragstext.
-- Fussleiste mit Reaktions- und Kommentarzahl sowie dem LinkedIn-Logo unten
-  rechts, das den Beitrag auf LinkedIn öffnet.
-- Erwähnungen und externe Links bleiben klickbar und öffnen in einem neuen Tab.
-  Nackte URLs und `#hashtags` werden auch dann verlinkt, wenn der Beitrag noch
-  nicht angereichert ist und sein Text daher gar keine Links enthält.
-- Der Beitragstext wird immer vollständig angezeigt, nie gekürzt.
-- Die Beiträge werden abwechselnd auf die Spalten verteilt (links, rechts,
-  links, …). Jede Karte schliesst direkt an die darüberliegende derselben
-  Spalte an; es gibt keine Ausrichtung auf gemeinsame Zeilenhöhen.
+- Header with profile picture and name on the left, compact time label on the
+  right (`25d`, `3mo`, as on LinkedIn). The full date is shown in the tooltip.
+- Below that the images, then the post text.
+- Footer with reaction and comment counts and the LinkedIn logo at the bottom
+  right, which opens the post on LinkedIn.
+- Mentions and external links stay clickable and open in a new tab. Bare URLs
+  and `#hashtags` are linked even if the post has not been enriched yet and its
+  text therefore contains no links at all.
+- The post text is always shown in full, never truncated.
+- Posts are distributed across the columns alternately (left, right, left, …).
+  Each card sits directly below the one above it in the same column; there is
+  no alignment to shared row heights.
 
-Es holt die freigegebenen JSON-Daten serverseitig und speichert die Antwort fünf
-Minuten im WordPress-Cache. Auf schmalen Bildschirmen wird das Raster einspaltig.
+It fetches the approved JSON data server-side and caches the response for five
+minutes in the WordPress cache. On narrow screens the grid becomes single-column.
 
-1. Installationspaket bauen und im Adminbereich unter „Plugins → Installieren →
-   Plugin hochladen“ einspielen, danach aktivieren:
+1. Build the installation package and upload it in the admin area under
+   "Plugins → Add New → Upload Plugin", then activate it:
 
    ```bash
    ./wordpress/build-plugin.sh
    ```
 
-   Das Skript legt `dist/linkedin-archive-feed-<Version>.zip` an. Die Version
-   liest es aus dem Plugin-Header; WordPress erkennt ein Update nur, wenn sie
-   dort erhöht wurde. Alternativ `wordpress/linkedin-archive.php` von Hand als
-   `wp-content/plugins/linkedin-archive-feed/linkedin-archive.php` ablegen.
-2. Im `wp-config.php` die vom WordPress-Server erreichbare API-Basis setzen und
-   Name sowie Profilbild hinterlegen:
+   The script creates `dist/linkedin-archive-feed-<version>.zip`. It reads the
+   version from the plugin header; WordPress only detects an update if it was
+   bumped there. Alternatively, place `wordpress/linkedin-archive.php` manually
+   as `wp-content/plugins/linkedin-archive-feed/linkedin-archive.php`.
+2. In `wp-config.php`, set the API base reachable from the WordPress server and
+   configure the name and profile picture:
 
    ```php
-   define('LINKEDIN_ARCHIVE_API_BASE',     'https://linkedinapi.glogger.ch');
+   define('LINKEDIN_ARCHIVE_API_BASE',     'https://<api_url>.example.net');
    define('LINKEDIN_ARCHIVE_AUTHOR_NAME',  'Steven Glogger');
-   define('LINKEDIN_ARCHIVE_AUTHOR_IMAGE', 'https://www.glogger.ch/wp-content/uploads/steven.jpg');
-   define('LINKEDIN_ARCHIVE_AUTHOR_URL',   'https://www.linkedin.com/in/steven-glogger/');
+   define('LINKEDIN_ARCHIVE_AUTHOR_IMAGE', 'https://www.example.net/logo.jpg');
+   define('LINKEDIN_ARCHIVE_AUTHOR_URL',   'http://linkedin.com/in/stevenglogger/');
    ```
 
-   Name und Profilbild stehen bewusst hier und nicht in der Datenbank: Das
-   Archiv speichert nur die eigenen Beiträge und lädt keine Profilbilder
-   herunter. Alle Beiträge stammen ohnehin von derselben Person. Ohne
-   `AUTHOR_IMAGE` zeigt die Kopfzeile einen Kreis mit den Initialen.
-3. Auf `/linkedin/` das bisherige Juicer-Embed durch den Shortcode
-   `[linkedin_archive limit="12" columns="2"]` ersetzen und den
-   WordPress-Seitencache leeren.
-4. Gewünschte Beiträge mit `docker compose exec archive python -m linkedin_archiver publish '<URN>'`
-   freigeben. Erst dann werden sie im Feed sichtbar. Mit `AUTO_PUBLISH=true`
-   entfällt dieser Schritt für neue Beiträge.
+   Name and profile picture are deliberately set here and not in the database:
+   the archive stores only your own posts and does not download profile
+   pictures. All posts come from the same person anyway. Without
+   `AUTHOR_IMAGE`, the header shows a circle with the initials.
+3. On `/linkedin/`, replace the existing Juicer embed with the shortcode
+   `[linkedin_archive limit="12" columns="2"]` and clear the WordPress page
+   cache.
+4. Approve the desired posts with `docker compose exec archive python -m linkedin_archiver publish '<URN>'`.
+   Only then do they become visible in the feed. With `AUTO_PUBLISH=true` this
+   step is not needed for new posts.
 
-Alle Shortcode-Attribute:
+All shortcode attributes:
 
-| Attribut | Standard | Bedeutung |
+| Attribute | Default | Meaning |
 |---|---:|---|
-| `limit` | 12 | Beiträge pro Seite, 1–100 |
-| `columns` | 2 | Spalten, 1–4; unter 860 px einspaltig in chronologischer Reihenfolge |
-| `author` | Konstante | Überschreibt `LINKEDIN_ARCHIVE_AUTHOR_NAME` |
-| `avatar` | Konstante | Überschreibt `LINKEDIN_ARCHIVE_AUTHOR_IMAGE` |
-| `profile` | Konstante | Überschreibt `LINKEDIN_ARCHIVE_AUTHOR_URL` |
+| `limit` | 12 | Posts per page, 1–100 |
+| `columns` | 2 | Columns, 1–4; below 860 px single-column in chronological order |
+| `author` | constant | Overrides `LINKEDIN_ARCHIVE_AUTHOR_NAME` |
+| `avatar` | constant | Overrides `LINKEDIN_ARCHIVE_AUTHOR_IMAGE` |
+| `profile` | constant | Overrides `LINKEDIN_ARCHIVE_AUTHOR_URL` |
 
-Reaktions- und Kommentarzahl erscheinen nur, wenn sie im Archiv vorhanden sind;
-fehlende Werte werden weggelassen und nicht als Null dargestellt.
+Reaction and comment counts only appear if they exist in the archive; missing
+values are omitted and not shown as zero.
 
-Wenn WordPress und Docker auf demselben Host laufen, kann WordPress intern
-`http://127.0.0.1:8080` verwenden. Für Bilder im Browser braucht es zusätzlich
-eine öffentliche HTTPS-Basis. Ein Nginx-Reverse-Proxy auf demselben Host kann
-den Pfad vor den WordPress-Rewrite-Regeln weiterleiten:
+If WordPress and Docker run on the same host, WordPress can use
+`http://127.0.0.1:8080` internally. Images in the browser additionally require
+a public HTTPS base. An Nginx reverse proxy on the same host can forward the
+path before the WordPress rewrite rules:
 
 ```nginx
 location = /linkedin-api/api/v1/raw/posts {
@@ -482,22 +465,22 @@ location /linkedin-api/ {
 }
 ```
 
-Dann `API_PUBLIC_BASE_URL=https://www.glogger.ch/linkedin-api` in `.env` setzen
-und `docker compose up -d --force-recreate api` ausführen. Auch die
-`LINKEDIN_ARCHIVE_API_BASE`-Konstante auf diese URL setzen. Liegt WordPress auf
-einem anderen Server, muss dessen Server die API über eine erreichbare
-HTTPS-Adresse ansprechen können; Nginx und Netzwerkfreigabe entsprechend auf
-dem Docker-Host einrichten. Der gezeigte Nginx-Block sperrt den privaten
-Rohdaten-Endpunkt für externe Zugriffe. Der Browser-Origin `API_ALLOWED_ORIGIN` ist für eine direkte
-JavaScript-Einbindung gedacht; der WordPress-Shortcode benötigt kein CORS.
+Then set `API_PUBLIC_BASE_URL=https://www.example.net/linkedin-api` in `.env`
+and run `docker compose up -d --force-recreate api`. Also set the
+`LINKEDIN_ARCHIVE_API_BASE` constant to this URL. If WordPress runs on a
+different server, that server must be able to reach the API via an accessible
+HTTPS address; set up Nginx and network access on the Docker host accordingly.
+The Nginx block shown blocks the private raw data endpoint for external access.
+The browser origin `API_ALLOWED_ORIGIN` is intended for direct JavaScript
+integration; the WordPress shortcode does not need CORS.
 
-Die Vorlage ändert die bestehende Website nicht automatisch. WordPress-Zugang,
-Serverstandort und Reverse-Proxy-Konfiguration sind dafür erforderlich.
+The template does not change the existing website automatically. WordPress
+access, server location and reverse proxy configuration are required for that.
 
-## Optional: angemeldeter Browser
+## Optional: logged-in browser
 
-Für öffentlich lesbare Beiträge ist kein Browser-Login nötig. Für eigene
-eingeschränkte Beiträge kann lokal ein Playwright-Storage-State erzeugt werden:
+No browser login is needed for publicly readable posts. For your own restricted
+posts, a Playwright storage state can be created locally:
 
 ```bash
 python3 -m venv .venv
@@ -506,29 +489,29 @@ python3 -m venv .venv
 .venv/bin/playwright codegen --save-storage=secrets/linkedin-state.json https://www.linkedin.com/login
 ```
 
-Im geöffneten Browser selbst anmelden, anschliessend das Fenster schliessen.
-Die Datei enthält Zugangsdaten und gehört nur lokal in `secrets/`. Unter Linux
-muss sie für den Containerbenutzer lesbar sein. Dann setzen:
+Log in yourself in the opened browser, then close the window. The file contains
+credentials and belongs only locally in `secrets/`. On Linux it must be
+readable by the container user. Then set:
 
 ```dotenv
 BROWSER_STORAGE_STATE=/run/secrets/linkedin-state.json
 ```
 
-Container neu erstellen. Es werden keine CAPTCHAs gelöst und keine Zugriffs- oder
-Anmeldesperren umgangen. Der Parser unterstützt die öffentliche Feed-HTML-Struktur;
-LinkedIns angemeldete Ansicht kann eine andere Struktur liefern und wird dann
-als nicht unterstützt protokolliert. Login ist daher keine Zusage, dass private
-Beiträge vollständig extrahiert werden können.
+Recreate the container. No CAPTCHAs are solved and no access or login blocks
+are bypassed. The parser supports the public feed HTML structure; LinkedIn's
+logged-in view may deliver a different structure, which is then logged as
+unsupported. Logging in is therefore no promise that private posts can be
+fully extracted.
 
-## Datenbank, Backups, Updates
+## Database, backups, updates
 
-Tabellen: `posts`, `post_links`, `post_media`, `post_events`, `sync_state`.
-Alle Textfelder verwenden utf8mb4, inklusive Emojis. Datumswerte werden in UTC
-gespeichert; bei Snapshot-Datumstexten wird UTC angenommen, passend zu den
-geprüften GMT-Uploadangaben. Rohdaten bleiben unverändert archiviert.
+Tables: `posts`, `post_links`, `post_media`, `post_events`, `sync_state`.
+All text fields use utf8mb4, including emojis. Dates are stored in UTC; UTC is
+assumed for snapshot date strings, matching the examined GMT upload data. Raw
+data is archived unchanged.
 
-MariaDB liegt im Volume `mariadb-data`, Medien und Exporte in `archive-data`.
-Beide sichern; nur ein SQL-Dump enthält nicht die Bilddateien.
+MariaDB lives in the `mariadb-data` volume, media and exports in `archive-data`.
+Back up both; an SQL dump alone does not contain the image files.
 
 ```bash
 mkdir -p backup
@@ -538,16 +521,16 @@ docker compose exec -T db sh -c \
 docker compose cp archive:/data/media backup/media
 ```
 
-Normales Stoppen: `docker compose down`. **`down -v` löscht die Datenvolumes.**
-Passwortvariablen des MariaDB-Images wirken nur beim ersten Initialisieren eines
-leeren Volumes. Spätere Passwortwechsel zusätzlich in MariaDB durchführen.
+Normal stop: `docker compose down`. **`down -v` deletes the data volumes.**
+The MariaDB image's password variables only take effect when an empty volume is
+first initialized. Later password changes must also be made in MariaDB.
 
-Bei Quellcode-Updates `docker compose up -d --build`. Diese erste Version erstellt
-das Schema mit `CREATE TABLE IF NOT EXISTS`; künftige Schemaänderungen benötigen
-explizite Migrationen. Image- und Bibliotheksversionen sind festgelegt und sollten
-regelmässig kontrolliert aktualisiert werden.
+For source code updates, run `docker compose up -d --build`. This first version
+creates the schema with `CREATE TABLE IF NOT EXISTS`; future schema changes
+require explicit migrations. Image and library versions are pinned and should
+be updated regularly in a controlled way.
 
-## Entwicklung und Tests
+## Development and tests
 
 ```bash
 python3 -m venv .venv
@@ -555,22 +538,22 @@ python3 -m venv .venv
 .venv/bin/python -m pytest -q
 ```
 
-Die Textaufbereitung des WordPress-Plugins wird separat geprüft:
+The WordPress plugin's text processing is tested separately:
 
 ```bash
 docker run --rm -v "$PWD/wordpress:/w:ro" php:8.3-cli php /w/tests.php
 ```
 
-`build-plugin.sh` führt diese Prüfungen vor dem Packen aus und bricht bei einem
-Fehlschlag ab, sofern PHP verfügbar ist.
+`build-plugin.sh` runs these checks before packaging and aborts on failure,
+provided PHP is available.
 
-Die MariaDB-Integrationstests laufen nur bei gesetztem `TEST_DB_HOST`,
-`TEST_DB_PORT` und `TEST_DB_PASSWORD`. **Nur eine leere Testdatenbank**
-`linkedin_archive` mit Benutzer `linkedin` verwenden: Die Tests leeren die
-Anwendungstabellen. Geprüft werden u.a. Linkerhaltung, Abgrenzung von Kommentaren,
-HTML-Bereinigung, Paginierung, Checkpoint-Rollback, Duplikate und Medienfehler.
+The MariaDB integration tests only run when `TEST_DB_HOST`, `TEST_DB_PORT` and
+`TEST_DB_PASSWORD` are set. **Only use an empty test database**
+`linkedin_archive` with user `linkedin`: the tests empty the application
+tables. Covered areas include link preservation, separation from comments, HTML
+sanitization, pagination, checkpoint rollback, duplicates and media errors.
 
-Quellen: [LinkedIn Member-Zugang](https://learn.microsoft.com/en-us/linkedin/dma/member-data-portability/member-data-portability-member/),
+Sources: [LinkedIn member access](https://learn.microsoft.com/en-us/linkedin/dma/member-data-portability/member-data-portability-member/),
 [Snapshot](https://learn.microsoft.com/en-us/linkedin/dma/member-data-portability/shared/member-snapshot-api),
 [Changelog](https://learn.microsoft.com/en-us/linkedin/dma/member-data-portability/shared/member-changelog-api),
 [Playwright Docker](https://playwright.dev/python/docs/docker),
