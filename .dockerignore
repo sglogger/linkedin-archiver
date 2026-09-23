@@ -1,0 +1,8 @@
+*
+
+!requirements.txt
+!pyproject.toml
+!linkedin_archiver/
+
+linkedin_archiver/**/__pycache__/
+linkedin_archiver/**/*.py[cod]

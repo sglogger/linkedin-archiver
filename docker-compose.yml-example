@@ -1,0 +1,103 @@
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-linkedin_archive}
+      MARIADB_USER: ${MARIADB_USER:-linkedin}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?Set MARIADB_PASSWORD in .env}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?Set MARIADB_ROOT_PASSWORD in .env}
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  archive:
+    build: .
+    image: linkedin-archiver:local
+    restart: unless-stopped
+    init: true
+    shm_size: 512mb
+    stop_grace_period: 90s
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      LINKEDIN_ACCESS_TOKEN: ${LINKEDIN_ACCESS_TOKEN:-}
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-3306}
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-linkedin_archive}
+      MARIADB_USER: ${MARIADB_USER:-linkedin}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?Set MARIADB_PASSWORD in .env}
+      SYNC_INTERVAL_SECONDS: ${SYNC_INTERVAL_SECONDS:-3600}
+      SNAPSHOT_INTERVAL_SECONDS: ${SNAPSHOT_INTERVAL_SECONDS:-86400}
+      POST_REFRESH_DAYS: ${POST_REFRESH_DAYS:-1}
+      RETRY_INTERVAL_SECONDS: ${RETRY_INTERVAL_SECONDS:-3600}
+      MAX_POSTS_PER_CYCLE: ${MAX_POSTS_PER_CYCLE:-20}
+      PAGE_DELAY_SECONDS: ${PAGE_DELAY_SECONDS:-5}
+      REQUEST_TIMEOUT_SECONDS: ${REQUEST_TIMEOUT_SECONDS:-45}
+      MAX_API_PAGES: ${MAX_API_PAGES:-10000}
+      PAGE_ENRICHMENT_ENABLED: ${PAGE_ENRICHMENT_ENABLED:-true}
+      BROWSER_FALLBACK_ENABLED: ${BROWSER_FALLBACK_ENABLED:-true}
+      BROWSER_STORAGE_STATE: ${BROWSER_STORAGE_STATE:-}
+      DOWNLOAD_MEDIA: ${DOWNLOAD_MEDIA:-true}
+      MAX_MEDIA_SIZE_MB: ${MAX_MEDIA_SIZE_MB:-100}
+      MEDIA_ALLOWED_HOSTS: ${MEDIA_ALLOWED_HOSTS:-licdn.com,linkedin.com}
+      MEDIA_DIR: /data/media
+      EXPORT_DIR: /data/export
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - archive-data:/data
+      - ./secrets:/run/secrets:ro
+    healthcheck:
+      test: ["CMD", "python", "-m", "linkedin_archiver", "healthcheck"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 5m
+
+  api:
+    image: linkedin-archiver:local
+    build: .
+    command: ["api"]
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-3306}
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-linkedin_archive}
+      MARIADB_USER: ${MARIADB_USER:-linkedin}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?Set MARIADB_PASSWORD in .env}
+      MEDIA_DIR: /data/media
+      API_READ_KEY: ${API_READ_KEY:-}
+      API_PUBLIC_BASE_URL: ${API_PUBLIC_BASE_URL:-http://localhost:8080}
+      API_ALLOWED_ORIGIN: ${API_ALLOWED_ORIGIN:-https://www.glogger.ch}
+    volumes:
+      - archive-data:/data:ro
+    ports:
+      - "${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 2m
+
+volumes:
+  mariadb-data:
+  archive-data:

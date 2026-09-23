@@ -1,0 +1,30 @@
+# Zugangsdaten und lokale Konfiguration
+.env
+.env.*
+!.env-example
+docker-compose.yml
+secrets/
+*.pem
+*.key
+
+# Exportierte Archivdaten und Medien
+archive.json
+website.json
+backup/
+media/
+data/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Editor und Betriebssystem
+.DS_Store
+.idea/
+.vscode/
