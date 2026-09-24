@@ -184,7 +184,9 @@ function linkedin_archive_prepare_content($html) {
             $result .= $part;
             continue;
         }
-        $result .= $anchor_depth > 0 ? $part : linkedin_archive_linkify($part);
+        $part = $anchor_depth > 0 ? $part : linkedin_archive_linkify($part);
+        // Ältere Einträge speichern Zeilenumbrüche noch als rohes \n.
+        $result .= preg_replace('/\r?\n/', '<br>', $part);
     }
     return $result;
 }
@@ -283,9 +285,7 @@ add_shortcode('linkedin_archive', function ($attributes) {
     /* Deckel gegen Hochformate, die sonst die ganze Karte füllen. */
     .li-archive-card__media img,.li-archive-card__media video{width:100%;height:auto;display:block;max-height:520px;object-fit:cover}
     .li-archive-card__body{padding:14px 16px;flex:1 1 auto}
-    /* LinkedIn liefert Absätze im Fliesstext als echte Zeilenumbrüche, nicht als
-       <br>. Ohne pre-line würden sie im Browser zu Leerzeichen zusammenfallen. */
-    .li-archive-card__text{line-height:1.6;color:#1b1f24;overflow-wrap:anywhere;white-space:pre-line}
+    .li-archive-card__text{line-height:1.6;color:#1b1f24;overflow-wrap:anywhere}
     .li-archive-card__text p{margin:0 0 .8em}
     .li-archive-card__text p:last-child{margin-bottom:0}
     .li-archive-card__text a{color:#0a66c2;text-decoration:none;overflow-wrap:anywhere}
@@ -294,7 +294,7 @@ add_shortcode('linkedin_archive', function ($attributes) {
     .li-archive-reshare__head{display:flex;align-items:center;gap:7px;font-size:.84rem;color:#66707d;margin-bottom:8px}
     .li-archive-reshare__head a{color:#0a66c2;text-decoration:none;font-weight:600}
     .li-archive-reshare__head a:hover{text-decoration:underline}
-    .li-archive-reshare__text{line-height:1.55;font-size:.94rem;color:#3d454f;overflow-wrap:anywhere;white-space:pre-line}
+    .li-archive-reshare__text{line-height:1.55;font-size:.94rem;color:#3d454f;overflow-wrap:anywhere}
     .li-archive-reshare__text p{margin:0 0 .7em}
     .li-archive-reshare__text p:last-child{margin-bottom:0}
     .li-archive-reshare__text a{color:#0a66c2;text-decoration:none}
@@ -334,7 +334,7 @@ add_shortcode('linkedin_archive', function ($attributes) {
         if (!empty($post['content_html'])) {
             $body = linkedin_archive_prepare_content(wp_kses_post($post['content_html']));
         } else {
-            $body = linkedin_archive_linkify(esc_html($post['content_text'] ?? ''));
+            $body = preg_replace('/\r?\n/', '<br>', linkedin_archive_linkify(esc_html($post['content_text'] ?? '')));
         }
         ?>
         <article class="li-archive-card" style="order:<?php echo esc_attr($order); ?>">

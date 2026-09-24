@@ -228,3 +228,10 @@ def test_linkedin_click_redirect_is_unwrapped_to_the_real_target():
 def test_a_post_with_text_is_unaffected():
     page = parse_page(FIXTURE.read_text(), URL, KEY)
     assert page.text and page.html and page.fragment
+
+
+def test_render_fragment_keeps_line_breaks():
+    html, text, _ = render_fragment('<p>\nErste Zeile\n\nZweite <a href="https://example.com">Link</a>\nDritte\n</p>',
+                                    URL)
+    assert html == '<p>Erste Zeile<br><br>Zweite <a href="https://example.com" rel="noopener noreferrer">Link</a><br>Dritte</p>'
+    assert text == 'Erste Zeile\n\nZweite Link\nDritte'

@@ -77,7 +77,10 @@ def render_fragment(fragment: str, base: str) -> tuple[str, str, list[dict]]:
     def render(node):
         if isinstance(node, NavigableString):
             plain.append(str(node))
-            return escape(str(node))
+            # LinkedIn trennt Zeilen im Kommentar mit rohen Zeilenumbrüchen und
+            # white-space:pre-wrap. Als <br> überstehen sie jedes Theme und
+            # jeden HTML-Minifier.
+            return escape(str(node)).replace("\r\n", "\n").replace("\n", "<br>")
         if not isinstance(node, Tag):
             return ""
         if node.name == "br":
@@ -98,6 +101,9 @@ def render_fragment(fragment: str, base: str) -> tuple[str, str, list[dict]]:
         return children
 
     html = "".join(render(c) for c in soup.contents).strip()
+    # Umbrüche am Anfang oder Ende eines Absatzes sind nur Einrückung im Markup.
+    html = re.sub(r"(<p>)(?:\s*<br>)+|(?:<br>\s*)+(</p>)", r"\1\2", html)
+    html = re.sub(r"^(?:<br>\s*)+|(?:\s*<br>)+$", "", html)
     return html, "".join(plain).strip(), links
 
 
