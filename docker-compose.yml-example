@@ -18,7 +18,10 @@ services:
       start_period: 30s
 
   archive:
-    build: .
+    build:
+      context: .
+      # Basis-Image bei jedem Build neu holen, damit Sicherheitsupdates ankommen.
+      pull: true
     image: linkedin-archiver:local
     restart: unless-stopped
     init: true
@@ -66,7 +69,10 @@ services:
 
   api:
     image: linkedin-archiver:local
-    build: .
+    build:
+      context: .
+      # Basis-Image bei jedem Build neu holen, damit Sicherheitsupdates ankommen.
+      pull: true
     command: ["api"]
     restart: unless-stopped
     init: true

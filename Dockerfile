@@ -1,5 +1,10 @@
 FROM mcr.microsoft.com/playwright/python:v1.63.0-noble
 
+# Systempakete (u.a. libbrotli1) beim Build auf den aktuellen Stand bringen.
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
